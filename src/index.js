@@ -1,0 +1,77 @@
+import 'dotenv/config.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import dayjs from 'dayjs';
+import tz from 'dayjs/plugin/timezone.js';
+import utc from 'dayjs/plugin/utc.js';
+dayjs.extend(utc); dayjs.extend(tz);
+import { readTable, writeBack } from './google.js';
+import { EPISODE_STRUCTURES, createSectionPrompt, createTitlePrompt, createDescriptionPrompt, createHTMLDescriptionPrompt, createTagsPrompt } from './prompts.js';
+import { chatComplete } from './openai-text.js';
+import { synthesizeToMp3 } from './tts.js';
+import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
+import { refreshAccessToken, uploadEpisode } from './spreaker.js';
+const SPREADSHEET_ID=process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+const TAB_NAME=process.env.GOOGLE_SHEETS_TAB_NAME;
+const SHOW_ID=process.env.SPREAKER_SHOW_ID;
+const MAX_EPISODES=parseInt(process.env.MAX_EPISODES_PER_RUN||'2',10);
+const DRY=coerceBoolean(process.env.DRY_RUN||'false');
+const TZ=process.env.EPISODE_TIMEZONE||'UTC';
+const PUBLISH_TIME=process.env.SPREAKER_PUBLISH_TIME_UTC||'08:00:00';
+function pickEpisodeType(v){const s=(v||'').toLowerCase(); if(s.includes('fri')) return 'friday'; return s.includes('main')?'main':'main';}
+async function generateEpisodePackage({episodeType,input}){
+  const sections=EPISODE_STRUCTURES[episodeType]; let combined=''; const completed=[];
+  for(let i=0;i<sections.length;i++){ const sec=sections[i]; const prompt=createSectionPrompt(sec,input,completed,i,sections.length);
+    const content=await chatComplete([{role:'user',content:prompt}],{max_tokens:Math.round(sec.target*1.6)});
+    const wc=wordCount(content); completed.push({name:sec.name,content,wc}); combined+=(i?'\n\n':'')+content; }
+  const title=await chatComplete([{role:'user',content:createTitlePrompt(combined)}],{max_tokens:64,temperature:0.6});
+  const description=await chatComplete([{role:'user',content:createDescriptionPrompt(combined)}],{max_tokens:900,temperature:0.7});
+  const htmlDesc=await chatComplete([{role:'user',content:createHTMLDescriptionPrompt(combined)}],{max_tokens:900,temperature:0.7});
+  const tags=await chatComplete([{role:'user',content:createTagsPrompt(combined)}],{max_tokens:200,temperature:0.4});
+  if(!combined.toLowerCase().includes('supporters club')){
+    combined += "\n\nIf this podcast helps you make sense of your shit, join our Supporters Club to go ad-free and help us keep these conversations going. You can find the link to join in the episode description.";
+  }
+  return { script: combined, title: title.trim().replace(/^"|"$/g,''), description, htmlDesc, tags: sanitizeTags(tags) };
+}
+async function main(){
+  console.log('Starting weekly run...');
+  if(!SPREADSHEET_ID||!TAB_NAME) throw new Error('Missing Google Sheet env vars.');
+  if(!SHOW_ID) throw new Error('Missing SPREAKER_SHOW_ID.');
+  const { headers, rows } = await readTable({ spreadsheetId: SPREADSHEET_ID, tabName: TAB_NAME });
+  const get=(row,name)=>row[name.toLowerCase()]??row[name]??'';
+  const candidates=[];
+  for(const row of rows){
+    const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
+    const generated=get(row,'generated');
+    const publishDate=parsePublishDateDDMMYYYY(pubRaw,TZ);
+    if(!publishDate) continue;
+    if(!withinNextNDays(publishDate,60)) continue;
+    if(coerceBoolean(generated)) continue;
+    candidates.push(row);
+  }
+  console.log(`Found ${candidates.length} candidate rows.`);
+  const toProcess=candidates.slice(0,MAX_EPISODES);
+  let accessToken=null;
+  if(!DRY){ accessToken=await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); }
+  for(const row of toProcess){
+    const publishDate=parsePublishDateDDMMYYYY(get(row,'publish_date')||get(row,'date')||get(row,'publish'),TZ);
+    const topic=get(row,'topic')||get(row,'title')||'Untitled';
+    const type=pickEpisodeType(get(row,'type')||get(row,'episode_type'));
+    const inputString = `${publishDate.format('DD/MM/YYYY')} ${type==='main'?'Main Podcast':'Friday Healing'} **${topic}** ${topic}`;
+    console.log(`Generating episode for row ${row._rowIndex} (${topic}) type=${type} date=${publishDate.format('YYYY-MM-DD')}`);
+    const pkg=await generateEpisodePackage({ episodeType:type, input:inputString });
+    const audioPath=path.join(os.tmpdir(),`episode_${Date.now()}.mp3`);
+    if(!DRY){ await synthesizeToMp3(pkg.script,audioPath,'fable'); } else { fs.writeFileSync(audioPath,''); }
+    const autoUtc = publishDate.utc().format('YYYY-MM-DD') + ' ' + (PUBLISH_TIME||'08:00:00');
+    let uploaded={ episodeId:'DRY-RUN', raw:{} };
+    if(!DRY){
+      uploaded=await uploadEpisode({ accessToken, showId:SHOW_ID, filePath:audioPath, title:pkg.title, description:pkg.htmlDesc||pkg.description, tags:pkg.tags, autoPublishedAtUtc:autoUtc });
+    }
+    const episodeUrl = uploaded.episodeId && uploaded.episodeId!=='DRY-RUN' ? `https://www.spreaker.com/episode/${uploaded.episodeId}` : '';
+    await writeBack({ spreadsheetId:SPREADSHEET_ID, tabName:TAB_NAME, rowIndex:row._rowIndex, headers, data:{ generated:'TRUE', spreaker_episode_id:uploaded.episodeId||'', spreaker_url:episodeUrl, generated_at:new Date().toISOString() } });
+    console.log(`Row ${row._rowIndex} done -> episode_id=${uploaded.episodeId}`);
+  }
+  console.log('Run complete.');
+}
+main().catch(err=>{ console.error('Fatal error:', err); process.exit(1); });
