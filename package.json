@@ -1,0 +1,19 @@
+{
+  "name": "railway-podcast-automation",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Weekly podcast generator & uploader (Google Sheets -> OpenAI -> gpt-4o-mini-tts Fable -> Spreaker) for Railway Cron Jobs.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.0",
+    "googleapis": "^144.0.0",
+    "node-fetch": "^3.3.2"
+  }
+}
