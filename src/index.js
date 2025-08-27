@@ -12,6 +12,7 @@ import { chatComplete } from './openai-text.js';
 import { synthesizeToMp3 } from './tts.js';
 import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
 import { refreshAccessToken, uploadEpisode } from './spreaker.js';
+
 const SPREADSHEET_ID=process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 const TAB_NAME=process.env.GOOGLE_SHEETS_TAB_NAME;
 const SHOW_ID=process.env.SPREAKER_SHOW_ID;
@@ -19,7 +20,9 @@ const MAX_EPISODES=parseInt(process.env.MAX_EPISODES_PER_RUN||'2',10);
 const DRY=coerceBoolean(process.env.DRY_RUN||'false');
 const TZ=process.env.EPISODE_TIMEZONE||'UTC';
 const PUBLISH_TIME=process.env.SPREAKER_PUBLISH_TIME_UTC||'08:00:00';
+
 function pickEpisodeType(v){const s=(v||'').toLowerCase(); if(s.includes('fri')) return 'friday'; return s.includes('main')?'main':'main';}
+
 async function generateEpisodePackage({episodeType,input}){
   const sections=EPISODE_STRUCTURES[episodeType]; let combined=''; const completed=[];
   for(let i=0;i<sections.length;i++){ const sec=sections[i]; const prompt=createSectionPrompt(sec,input,completed,i,sections.length);
@@ -34,6 +37,7 @@ async function generateEpisodePackage({episodeType,input}){
   }
   return { script: combined, title: title.trim().replace(/^"|"$/g,''), description, htmlDesc, tags: sanitizeTags(tags) };
 }
+
 async function main(){
   console.log('Starting weekly run...');
   if(!SPREADSHEET_ID||!TAB_NAME) throw new Error('Missing Google Sheet env vars.');
@@ -66,7 +70,37 @@ async function main(){
     const autoUtc = publishDate.utc().format('YYYY-MM-DD') + ' ' + (PUBLISH_TIME||'08:00:00');
     let uploaded={ episodeId:'DRY-RUN', raw:{} };
     if(!DRY){
-      uploaded=await uploadEpisode({ accessToken, showId:SHOW_ID, filePath:audioPath, title:pkg.title, description:pkg.htmlDesc||pkg.description, tags:pkg.tags, autoPublishedAtUtc:autoUtc });
+      console.log(`Attempting to upload episode for row ${row._rowIndex}...`);
+      try {
+        uploaded=await uploadEpisode({ accessToken, showId:SHOW_ID, filePath:audioPath, title:pkg.title, description:pkg.htmlDesc||pkg.description, tags:pkg.tags, autoPublishedAtUtc:autoUtc });
+        console.log(`Successfully uploaded episode for row ${row._rowIndex}: ${uploaded.episodeId}`);
+      } catch (error) {
+        console.error(`Error uploading episode for row ${row._rowIndex}:`, error.message);
+        
+        // Check if error is related to readable stream issues
+        if (error.message && (error.message.includes('stream') || error.message.includes('Stream') || error.message.includes('readable') || error.message.includes('destroyed'))) {
+          console.error(`STREAM ERROR DETECTED for row ${row._rowIndex}: ${error.message}`);
+          console.error('This appears to be a readable stream related error. Stack trace:', error.stack);
+        }
+        
+        // Check if error is related to FormData issues
+        if (error.message && (error.message.includes('FormData') || error.message.includes('form-data') || error.message.includes('boundary') || error.message.includes('multipart'))) {
+          console.error(`FORMDATA ERROR DETECTED for row ${row._rowIndex}: ${error.message}`);
+          console.error('This appears to be a FormData related error. Stack trace:', error.stack);
+        }
+        
+        // Log additional context for debugging
+        console.error(`Upload attempt context for row ${row._rowIndex}:`);
+        console.error(`- Audio file path: ${audioPath}`);
+        console.error(`- File exists: ${fs.existsSync(audioPath)}`);
+        if (fs.existsSync(audioPath)) {
+          const stats = fs.statSync(audioPath);
+          console.error(`- File size: ${stats.size} bytes`);
+        }
+        
+        // Re-throw the error to maintain existing error handling behavior
+        throw error;
+      }
     }
     const episodeUrl = uploaded.episodeId && uploaded.episodeId!=='DRY-RUN' ? `https://www.spreaker.com/episode/${uploaded.episodeId}` : '';
     await writeBack({ spreadsheetId:SPREADSHEET_ID, tabName:TAB_NAME, rowIndex:row._rowIndex, headers, data:{ generated:'TRUE', spreaker_episode_id:uploaded.episodeId||'', spreaker_url:episodeUrl, generated_at:new Date().toISOString() } });
@@ -74,4 +108,5 @@ async function main(){
   }
   console.log('Run complete.');
 }
+
 main().catch(err=>{ console.error('Fatal error:', err); process.exit(1); });
