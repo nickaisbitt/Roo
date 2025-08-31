@@ -61,14 +61,16 @@ async function main(){
     // Extract date values and determine which column provided the value
     const pubDateField = get(row,'publish_date');
     const dateField = get(row,'date'); 
+    const episodeDateField = get(row,'episode date');
     const publishField = get(row,'publish');
     
-    const pubRaw = pubDateField || dateField || publishField;
+    const pubRaw = pubDateField || dateField || episodeDateField || publishField;
     
     // Determine which column name was used for the date (matching extraction logic exactly)
     let dateColumnUsed = 'none';
     if (pubDateField) dateColumnUsed = 'publish_date';
     else if (dateField) dateColumnUsed = 'date';
+    else if (episodeDateField) dateColumnUsed = 'episode date';
     else if (publishField) dateColumnUsed = 'publish';
     
     const parseResult=parsePublishDateDDMMYYYY(pubRaw,TZ);
@@ -110,7 +112,7 @@ async function main(){
   if (candidates.length > 0) {
     console.log(`Sample of valid dates found:`);
     candidates.slice(0, 3).forEach(row => {
-      const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
+      const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'episode date')||get(row,'publish');
       console.log(`  Row ${row._rowIndex}: "${pubRaw}" -> ${row._parsedDate.format('YYYY-MM-DD')}`);
     });
   }
@@ -125,12 +127,12 @@ async function main(){
     // Use cached date from filtering phase, or re-parse if needed
     let publishDate = row._parsedDate;
     if (!publishDate) {
-      const parseResult = parsePublishDateDDMMYYYY(get(row,'publish_date')||get(row,'date')||get(row,'publish'),TZ);
+      const parseResult = parsePublishDateDDMMYYYY(get(row,'publish_date')||get(row,'date')||get(row,'episode date')||get(row,'publish'),TZ);
       publishDate = parseResult.date;
     }
     
-    const topic=get(row,'topic')||get(row,'title')||'Untitled';
-    const type=pickEpisodeType(get(row,'type')||get(row,'episode_type'));
+    const topic=get(row,'topic')||get(row,'title')||get(row,'episode topic')||get(row,'episode title')||'Untitled';
+    const type=pickEpisodeType(get(row,'type')||get(row,'episode_type')||get(row,'episode type'));
     const inputString = `${publishDate.format('DD/MM/YYYY')} ${type==='main'?'Main Podcast':'Friday Healing'} **${topic}** ${topic}`;
     console.log(`Generating episode for row ${row._rowIndex} (${topic}) type=${type} date=${publishDate.format('YYYY-MM-DD')}`);
     const pkg=await generateEpisodePackage({ episodeType:type, input:inputString });

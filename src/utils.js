@@ -12,7 +12,7 @@ export function coerceBoolean(v) {
   if (typeof v === 'boolean') return v;
   if (v == null || v === '-') return false;
   const s = String(v).trim().toLowerCase();
-  return ['true', '1', 'yes', 'y', '✓', '✅'].includes(s);
+  return ['true', '1', 'yes', 'y', '✓', '✅', '✔️'].includes(s);
 }
 
 export function validateDateString(s) {
