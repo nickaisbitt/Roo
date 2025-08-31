@@ -39,6 +39,15 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
         statusText: error.response.statusText,
         data: error.response.data
       });
+      
+      // Provide helpful guidance for common OAuth errors
+      if (error.response.status === 400 && error.response.data?.error === 'invalid_grant') {
+        console.error('');
+        console.error('🔧 ACTION REQUIRED: The Spreaker refresh token has expired or is invalid.');
+        console.error('   Please regenerate a new refresh token from your Spreaker app settings');
+        console.error('   and update the SPREAKER_REFRESH_TOKEN environment variable.');
+        console.error('');
+      }
     }
     throw new Error(`OAuth token refresh failed: ${error.message}`);
   }
