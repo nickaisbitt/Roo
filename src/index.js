@@ -57,25 +57,50 @@ async function main(){
   for(const row of rows){
     const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
     const generated=get(row,'generated');
-    const publishDate=parsePublishDateDDMMYYYY(pubRaw,TZ);
     
-    if(!publishDate) {
+    // Determine which column name was used for the date
+    let dateColumnUsed = 'none';
+    if (get(row,'publish_date')) dateColumnUsed = 'publish_date';
+    else if (get(row,'date')) dateColumnUsed = 'date';
+    else if (get(row,'publish')) dateColumnUsed = 'publish';
+    
+    const parseResult=parsePublishDateDDMMYYYY(pubRaw,TZ);
+    
+    if(!parseResult.date) {
       skippedInvalidDate++;
+      console.log(`Row ${row._rowIndex}: Skipped - Invalid date. Column: ${dateColumnUsed}, Value: "${pubRaw}", Error: ${parseResult.error}`);
       continue;
     }
-    if(!withinNextNDays(publishDate,60)) {
+    if(!withinNextNDays(parseResult.date,63)) {
       skippedOutOfRange++;
+      console.log(`Row ${row._rowIndex}: Skipped - Out of range. Date: ${parseResult.date.format('YYYY-MM-DD')}, Column: ${dateColumnUsed}`);
       continue;
     }
-    if(coerceBoolean(generated)) {
+    
+    // Only skip if generated field is explicitly TRUE/YES/1, treat empty/blank as NOT generated
+    const isExplicitlyGenerated = generated && generated.toString().trim() !== '' && coerceBoolean(generated);
+    if(isExplicitlyGenerated) {
       skippedAlreadyGenerated++;
+      console.log(`Row ${row._rowIndex}: Skipped - Already generated. Generated field: "${generated}"`);
       continue;
     }
+    
+    // Add the date to the row for later use
+    row._parsedDate = parseResult.date;
     candidates.push(row);
   }
   
   console.log(`Found ${candidates.length} candidate rows.`);
   console.log(`Skipped: ${skippedInvalidDate} invalid dates, ${skippedOutOfRange} out of range, ${skippedAlreadyGenerated} already generated`);
+  
+  // Log sample of processed vs skipped dates for debugging
+  if (candidates.length > 0) {
+    console.log(`Sample of valid dates found:`);
+    candidates.slice(0, 3).forEach(row => {
+      const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
+      console.log(`  Row ${row._rowIndex}: "${pubRaw}" -> ${row._parsedDate.format('YYYY-MM-DD')}`);
+    });
+  }
   
   const toProcess=candidates.slice(0,MAX_EPISODES);
   if (candidates.length > MAX_EPISODES) {
@@ -84,7 +109,13 @@ async function main(){
   let accessToken=null;
   if(!DRY){ accessToken=await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); }
   for(const row of toProcess){
-    const publishDate=parsePublishDateDDMMYYYY(get(row,'publish_date')||get(row,'date')||get(row,'publish'),TZ);
+    // Use cached date from filtering phase, or re-parse if needed
+    let publishDate = row._parsedDate;
+    if (!publishDate) {
+      const parseResult = parsePublishDateDDMMYYYY(get(row,'publish_date')||get(row,'date')||get(row,'publish'),TZ);
+      publishDate = parseResult.date;
+    }
+    
     const topic=get(row,'topic')||get(row,'title')||'Untitled';
     const type=pickEpisodeType(get(row,'type')||get(row,'episode_type'));
     const inputString = `${publishDate.format('DD/MM/YYYY')} ${type==='main'?'Main Podcast':'Friday Healing'} **${topic}** ${topic}`;
