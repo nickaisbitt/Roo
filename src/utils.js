@@ -20,26 +20,35 @@ export function validateDateString(s) {
     return { isValid: false, error: 'Empty or non-string value', type: 'empty' };
   }
   
-  const trimmed = s.trim().toLowerCase();
+  const trimmed = s.trim();
+  
+  // Check for empty string after trimming
+  if (trimmed === '') {
+    return { isValid: false, error: 'Empty date string', type: 'empty' };
+  }
+  
+  const lowerTrimmed = trimmed.toLowerCase();
   
   // Check for common non-date words
   const nonDateWords = ['bonus', 'tbd', 'pending', 'unknown', 'na', 'n/a', 'tbc', 'to be confirmed'];
   for (const word of nonDateWords) {
-    if (trimmed.includes(word)) {
-      return { isValid: false, error: `Contains non-date word: "${word}"`, type: 'special_case', value: trimmed };
+    if (lowerTrimmed.includes(word)) {
+      return { isValid: false, error: `Contains non-date word: "${word}"`, type: 'special_case', value: lowerTrimmed };
     }
   }
   
   // Check if it looks like a date format
-  if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
-    return { isValid: false, error: 'Does not match DD/MM/YYYY format', type: 'format_error', value: s };
+  if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(trimmed)) {
+    return { isValid: false, error: 'Does not match DD/MM/YYYY format', type: 'format_error', value: trimmed };
   }
   
   return { isValid: true };
 }
 
 export function parsePublishDateDDMMYYYY(s, tz = 'UTC') {
-  if (!s) return { date: null, error: 'Empty date string', type: 'empty' };
+  if (!s || (typeof s === 'string' && s.trim() === '')) {
+    return { date: null, error: 'Empty date string', type: 'empty' };
+  }
   
   // First validate the string
   const validation = validateDateString(s);
