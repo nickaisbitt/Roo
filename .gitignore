@@ -1,0 +1,8 @@
+node_modules/
+test_debug.js
+.env
+*.log
+dist/
+build/
+tmp/
+.DS_Store
