@@ -119,6 +119,13 @@ async function main(){
   if (candidates.length > MAX_EPISODES) {
     console.log(`Processing first ${MAX_EPISODES} candidates (${candidates.length - MAX_EPISODES} will be processed in next run)`);
   }
+  
+  // If no episodes to process, exit gracefully without attempting OAuth refresh
+  if (toProcess.length === 0) {
+    console.log('No episodes to process. Exiting gracefully.');
+    return;
+  }
+  
   let accessToken=null;
   if(!DRY){ accessToken=await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); }
   for(const row of toProcess){
