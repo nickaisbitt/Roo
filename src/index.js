@@ -40,22 +40,47 @@ async function generateEpisodePackage({episodeType,input}){
 
 async function main(){
   console.log('Starting weekly run...');
+  console.log(`Environment: EPISODE_TIMEZONE=${TZ}, MAX_EPISODES=${MAX_EPISODES}, DRY_RUN=${DRY}`);
   if(!SPREADSHEET_ID||!TAB_NAME) throw new Error('Missing Google Sheet env vars.');
   if(!SHOW_ID) throw new Error('Missing SPREAKER_SHOW_ID.');
+  
+  console.log(`Reading Google Sheet: ${SPREADSHEET_ID}, tab: ${TAB_NAME}`);
   const { headers, rows } = await readTable({ spreadsheetId: SPREADSHEET_ID, tabName: TAB_NAME });
+  console.log(`Read ${rows.length} rows from Google Sheet`);
+  
   const get=(row,name)=>row[name.toLowerCase()]??row[name]??'';
   const candidates=[];
+  let skippedInvalidDate = 0;
+  let skippedOutOfRange = 0;
+  let skippedAlreadyGenerated = 0;
+  
   for(const row of rows){
     const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
     const generated=get(row,'generated');
     const publishDate=parsePublishDateDDMMYYYY(pubRaw,TZ);
-    if(!publishDate) continue;
-    if(!withinNextNDays(publishDate,60)) continue;
-    if(coerceBoolean(generated)) continue;
+    
+    if(!publishDate) {
+      skippedInvalidDate++;
+      continue;
+    }
+    if(!withinNextNDays(publishDate,60)) {
+      skippedOutOfRange++;
+      continue;
+    }
+    if(coerceBoolean(generated)) {
+      skippedAlreadyGenerated++;
+      continue;
+    }
     candidates.push(row);
   }
+  
   console.log(`Found ${candidates.length} candidate rows.`);
+  console.log(`Skipped: ${skippedInvalidDate} invalid dates, ${skippedOutOfRange} out of range, ${skippedAlreadyGenerated} already generated`);
+  
   const toProcess=candidates.slice(0,MAX_EPISODES);
+  if (candidates.length > MAX_EPISODES) {
+    console.log(`Processing first ${MAX_EPISODES} candidates (${candidates.length - MAX_EPISODES} will be processed in next run)`);
+  }
   let accessToken=null;
   if(!DRY){ accessToken=await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); }
   for(const row of toProcess){

@@ -1,8 +1,12 @@
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore.js';
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 export function coerceBoolean(v) {
   if (typeof v === 'boolean') return v;
@@ -24,9 +28,10 @@ export function withinNextNDays(d, n) {
   if (!d || !d.isValid()) return false;
   const now = dayjs().tz(process.env.EPISODE_TIMEZONE || 'UTC').startOf('day');
   const end = now.add(n, 'day').endOf('day');
+  // Allow episodes from 30 days ago to 60 days in the future
+  const start = now.subtract(30, 'day').startOf('day');
   const date = d.tz(process.env.EPISODE_TIMEZONE || 'UTC');
-  console.log(`Date check: ${date.format('YYYY-MM-DD HH:mm')} - now: ${now.format('YYYY-MM-DD HH:mm')} - limit: ${end.format('YYYY-MM-DD HH:mm')}`);
-  return date.isSameOrAfter(now) && date.isSameOrBefore(end);
+  return date.isSameOrAfter(start) && date.isSameOrBefore(end);
 }
 
 export function ensureNewlinesInPrivateKey(k) {

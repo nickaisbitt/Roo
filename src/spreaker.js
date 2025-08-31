@@ -7,6 +7,8 @@ const BASE = 'https://api.spreaker.com';
 export async function refreshAccessToken({ client_id, client_secret, refresh_token }) {
   const url = `${BASE}/oauth2/token`;
   
+  console.log('Refreshing Spreaker access token...');
+  
   // Create a fresh FormData instance for each request
   const form = new FormData();
   
@@ -20,13 +22,26 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     console.error('Warning: FormData instance is destroyed before axios.post');
   }
 
-  const res = await axios.post(url, form, {
-    headers: {
-      ...form.getHeaders()
+  try {
+    const res = await axios.post(url, form, {
+      headers: {
+        ...form.getHeaders()
+      }
+    });
+    
+    console.log('Successfully refreshed Spreaker access token');
+    return res.data.access_token;
+  } catch (error) {
+    console.error('Failed to refresh Spreaker access token:', error.message);
+    if (error.response) {
+      console.error('OAuth Error Response:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      });
     }
-  });
-  
-  return res.data.access_token;
+    throw new Error(`OAuth token refresh failed: ${error.message}`);
+  }
 }
 
 export async function uploadEpisode({
