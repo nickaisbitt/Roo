@@ -53,22 +53,35 @@ async function main(){
   let skippedInvalidDate = 0;
   let skippedOutOfRange = 0;
   let skippedAlreadyGenerated = 0;
+  let skippedEmptyDate = 0;
   
   for(const row of rows){
-    const pubRaw=get(row,'publish_date')||get(row,'date')||get(row,'publish');
     const generated=get(row,'generated');
     
-    // Determine which column name was used for the date
+    // Extract date values and determine which column provided the value
+    const pubDateField = get(row,'publish_date');
+    const dateField = get(row,'date'); 
+    const publishField = get(row,'publish');
+    
+    const pubRaw = pubDateField || dateField || publishField;
+    
+    // Determine which column name was used for the date (matching extraction logic exactly)
     let dateColumnUsed = 'none';
-    if (get(row,'publish_date')) dateColumnUsed = 'publish_date';
-    else if (get(row,'date')) dateColumnUsed = 'date';
-    else if (get(row,'publish')) dateColumnUsed = 'publish';
+    if (pubDateField) dateColumnUsed = 'publish_date';
+    else if (dateField) dateColumnUsed = 'date';
+    else if (publishField) dateColumnUsed = 'publish';
     
     const parseResult=parsePublishDateDDMMYYYY(pubRaw,TZ);
     
     if(!parseResult.date) {
-      skippedInvalidDate++;
-      console.log(`Row ${row._rowIndex}: Skipped - Invalid date. Column: ${dateColumnUsed}, Value: "${pubRaw}", Error: ${parseResult.error}`);
+      // Handle completely empty date rows differently to reduce log noise
+      if (parseResult.type === 'empty' && dateColumnUsed === 'none') {
+        skippedEmptyDate++;
+        // Skip logging individual empty date rows to reduce noise
+      } else {
+        skippedInvalidDate++;
+        console.log(`Row ${row._rowIndex}: Skipped - Invalid date. Column: ${dateColumnUsed}, Value: "${pubRaw}", Error: ${parseResult.error}`);
+      }
       continue;
     }
     if(!withinNextNDays(parseResult.date,63)) {
@@ -91,7 +104,7 @@ async function main(){
   }
   
   console.log(`Found ${candidates.length} candidate rows.`);
-  console.log(`Skipped: ${skippedInvalidDate} invalid dates, ${skippedOutOfRange} out of range, ${skippedAlreadyGenerated} already generated`);
+  console.log(`Skipped: ${skippedInvalidDate} invalid dates, ${skippedOutOfRange} out of range, ${skippedAlreadyGenerated} already generated, ${skippedEmptyDate} empty dates`);
   
   // Log sample of processed vs skipped dates for debugging
   if (candidates.length > 0) {
