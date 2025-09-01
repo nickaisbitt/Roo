@@ -13,7 +13,39 @@ const REDIRECT_URI = process.env.SPREAKER_REDIRECT_URI    // must match Spreaker
 const STATE = process.env.OAUTH_STATE || "roo_csrf_state_please_change_me";
 
 app.get("/", (_req, res) => {
-  res.send(`<h1>Roo OAuth</h1><p><a href="/oauth/login">Connect Spreaker</a></p>`);
+  res.send(`
+    <h1>Roo OAuth Helper</h1>
+    <p>This helper will generate a new Spreaker refresh token for your Railway application.</p>
+    
+    <h2>Before you start:</h2>
+    <ol>
+      <li>Make sure SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET are set in your Railway environment</li>
+      <li>Your Spreaker app redirect URI should match: <strong>${REDIRECT_URI}</strong></li>
+    </ol>
+    
+    <h2>Ready?</h2>
+    <p><a href="/oauth/login" style="background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Connect Spreaker & Get New Token</a></p>
+    
+    <h2>Debug Info:</h2>
+    <ul>
+      <li>Client ID: ${CLIENT_ID ? '✅ Set' : '❌ Missing'}</li>
+      <li>Client Secret: ${CLIENT_SECRET ? '✅ Set' : '❌ Missing'}</li>
+      <li>Redirect URI: ${REDIRECT_URI}</li>
+    </ul>
+  `);
+});
+
+app.get("/health", (_req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    config: {
+      client_id_set: !!CLIENT_ID,
+      client_secret_set: !!CLIENT_SECRET,
+      redirect_uri: REDIRECT_URI,
+      state: STATE
+    }
+  });
 });
 
 app.get("/oauth/login", (_req, res) => {
@@ -52,10 +84,25 @@ app.get("/oauth/callback", async (req, res) => {
     console.log("Spreaker tokens:", data); // shows access_token + refresh_token
 
     res.send(`
-      <h2>✅ Connected to Spreaker</h2>
-      <p>Copy this into your Railway variables <strong>for the main job</strong>:</p>
-      <pre>SPREAKER_REFRESH_TOKEN=${data.refresh_token}</pre>
-      <p>(You don't need to save the short-lived access token; your job already refreshes it.)</p>
+      <h2>✅ Successfully Connected to Spreaker!</h2>
+      
+      <h3>Next Steps:</h3>
+      <ol>
+        <li><strong>Copy the refresh token below</strong></li>
+        <li><strong>Go to your Railway dashboard</strong></li>
+        <li><strong>Update the SPREAKER_REFRESH_TOKEN environment variable</strong></li>
+        <li><strong>Redeploy your main service</strong></li>
+      </ol>
+      
+      <h3>Your New Refresh Token:</h3>
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">
+        <strong>SPREAKER_REFRESH_TOKEN=${data.refresh_token}</strong>
+      </div>
+      
+      <p><small>💡 This token will replace your old expired token. The access token is short-lived and will be automatically refreshed by your application.</small></p>
+      
+      <h3>Alternative: Use Railway CLI</h3>
+      <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px;">railway variables set SPREAKER_REFRESH_TOKEN=${data.refresh_token}</pre>
     `);
   } catch (e) {
     const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
