@@ -13,6 +13,32 @@ import { synthesizeToMp3 } from './tts.js';
 import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
 import { refreshAccessToken, uploadEpisode, validateRefreshToken } from './spreaker.js';
 
+// Global counters for tracking OAuth operations
+let oauthOperationCount = {
+  refreshAttempts: 0,
+  refreshSuccesses: 0,
+  refreshFailures: 0,
+  uploadRetries: 0,
+  proactiveChecks: 0,
+  railwayUpdates: 0,
+  startupValidations: 0
+};
+
+/**
+ * Log OAuth operation statistics for debugging recurring issues
+ */
+function logOAuthStats(context = '') {
+  console.log(`📊 OAuth Operations Stats${context ? ` (${context})` : ''}:`);
+  console.log(`   - Token refresh attempts: ${oauthOperationCount.refreshAttempts}`);
+  console.log(`   - Token refresh successes: ${oauthOperationCount.refreshSuccesses}`);
+  console.log(`   - Token refresh failures: ${oauthOperationCount.refreshFailures}`);
+  console.log(`   - Upload retries due to auth: ${oauthOperationCount.uploadRetries}`);
+  console.log(`   - Proactive health checks: ${oauthOperationCount.proactiveChecks}`);
+  console.log(`   - Railway env updates: ${oauthOperationCount.railwayUpdates}`);
+  console.log(`   - Startup validations: ${oauthOperationCount.startupValidations}`);
+  console.log(`   - Success rate: ${oauthOperationCount.refreshAttempts > 0 ? ((oauthOperationCount.refreshSuccesses / oauthOperationCount.refreshAttempts) * 100).toFixed(1) : 'N/A'}%`);
+}
+
 const SPREADSHEET_ID=process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 const TAB_NAME=process.env.GOOGLE_SHEETS_TAB_NAME;
 const SHOW_ID=process.env.SPREAKER_SHOW_ID;
@@ -30,6 +56,7 @@ let currentRefreshToken = process.env.SPREAKER_REFRESH_TOKEN;
  */
 async function validateTokenAtStartup() {
   console.log('🔍 Validating refresh token at startup...');
+  oauthOperationCount.startupValidations++;
   
   if (!currentRefreshToken) {
     throw new Error('No SPREAKER_REFRESH_TOKEN environment variable found. Please set this before deployment.');
@@ -44,12 +71,15 @@ async function validateTokenAtStartup() {
   // Test the token by making a refresh call
   try {
     console.log('🔑 Testing refresh token validity with Spreaker API...');
+    oauthOperationCount.refreshAttempts++;
+    
     const tokenResult = await refreshAccessToken({ 
       client_id: process.env.SPREAKER_CLIENT_ID, 
       client_secret: process.env.SPREAKER_CLIENT_SECRET, 
       refresh_token: currentRefreshToken 
     });
     
+    oauthOperationCount.refreshSuccesses++;
     console.log('✅ Refresh token is valid and working');
     
     // Update current token if a new one was provided
@@ -65,6 +95,7 @@ async function validateTokenAtStartup() {
     
     return typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
   } catch (error) {
+    oauthOperationCount.refreshFailures++;
     console.error('❌ Startup token validation failed:', error.message);
     
     if (error.message.includes('invalid_grant') || error.message.includes('Invalid refresh token')) {
@@ -77,6 +108,9 @@ async function validateTokenAtStartup() {
       console.error('');
       console.error('   Current token (last 8 chars):', currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined');
     }
+    
+    // Log current stats for debugging
+    logOAuthStats('startup validation failure');
     
     throw new Error(`Startup token validation failed: ${error.message}. Please fix the refresh token before deployment.`);
   }
@@ -97,6 +131,7 @@ async function updateRailwayEnvironment(newRefreshToken, context = 'token refres
     while (attempts < maxAttempts) {
       try {
         attempts++;
+        oauthOperationCount.railwayUpdates++;
         console.log(`🚀 Updating Railway environment (attempt ${attempts}/${maxAttempts}) - context: ${context}...`);
         
         const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
@@ -119,6 +154,8 @@ async function updateRailwayEnvironment(newRefreshToken, context = 'token refres
         } else {
           console.error('❌ Failed to automatically update Railway environment variable after all attempts');
           console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
+          // Log stats to help with debugging Railway API issues
+          logOAuthStats('Railway update failure');
         }
       }
     }
@@ -145,6 +182,7 @@ async function safeRefreshAccessToken() {
   while (attempts < maxAttempts) {
     try {
       attempts++;
+      oauthOperationCount.refreshAttempts++;
       console.log(`🔄 Token refresh attempt ${attempts}/${maxAttempts}...`);
       
       const tokenResult = await refreshAccessToken({ 
@@ -153,6 +191,7 @@ async function safeRefreshAccessToken() {
         refresh_token: currentRefreshToken 
       });
       
+      oauthOperationCount.refreshSuccesses++;
       const accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
       
       // Critical: If Spreaker provided a new refresh token, update our current state immediately
@@ -171,6 +210,7 @@ async function safeRefreshAccessToken() {
       
       return accessToken;
     } catch (error) {
+      oauthOperationCount.refreshFailures++;
       console.error(`❌ OAuth token refresh attempt ${attempts} failed:`, error.message);
       
       if (attempts < maxAttempts && !error.message.includes('invalid_grant')) {
@@ -195,6 +235,9 @@ async function safeRefreshAccessToken() {
         console.error('');
       }
       
+      // Log stats for debugging recurring issues
+      logOAuthStats('token refresh failure');
+      
       throw error;
     }
   }
@@ -212,6 +255,10 @@ async function safeUploadEpisode(currentAccessToken, uploadParams) {
     try {
       attempts++;
       const tokenToUse = attempts === 1 ? currentAccessToken : await safeRefreshAccessToken();
+      
+      if (attempts > 1) {
+        oauthOperationCount.uploadRetries++;
+      }
       
       console.log(`🔄 Upload attempt ${attempts}/${maxAttempts} for episode: ${uploadParams.title}`);
       return await uploadEpisode({ accessToken: tokenToUse, ...uploadParams });
@@ -232,6 +279,8 @@ async function safeUploadEpisode(currentAccessToken, uploadParams) {
       } else {
         // Final attempt failed
         console.error('❌ Upload failed after all retry attempts');
+        // Log stats to help debug upload issues
+        logOAuthStats('upload failure');
         throw error;
       }
     }
@@ -244,6 +293,7 @@ async function safeUploadEpisode(currentAccessToken, uploadParams) {
  */
 async function proactiveTokenHealthCheck() {
   console.log('🩺 Performing proactive token health check...');
+  oauthOperationCount.proactiveChecks++;
   
   try {
     // Always refresh the token proactively to ensure we have a fresh access token
@@ -253,6 +303,8 @@ async function proactiveTokenHealthCheck() {
     return accessToken;
   } catch (error) {
     console.error('⚠️ Proactive token health check failed:', error.message);
+    // Log stats when proactive checks fail
+    logOAuthStats('proactive health check failure');
     throw error;
   }
 }
@@ -455,7 +507,16 @@ async function main(){
     await writeBack({ spreadsheetId:SPREADSHEET_ID, tabName:TAB_NAME, rowIndex:row._rowIndex, headers, data:{ generated:'TRUE', spreaker_episode_id:uploaded.episodeId||'', spreaker_url:episodeUrl, generated_at:new Date().toISOString() } });
     console.log(`Row ${row._rowIndex} done -> episode_id=${uploaded.episodeId}`);
   }
+  
   console.log('Run complete.');
+  
+  // Log final OAuth statistics for this run
+  logOAuthStats('run completion');
 }
 
-main().catch(err=>{ console.error('Fatal error:', err); process.exit(1); });
+main().catch(err=>{ 
+  console.error('Fatal error:', err);
+  // Log OAuth stats even on fatal errors to help with debugging
+  logOAuthStats('fatal error');
+  process.exit(1); 
+});
