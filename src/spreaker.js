@@ -31,7 +31,121 @@ function validateRefreshToken(token) {
   return { valid: true };
 }
 
-export { validateRefreshToken };
+/**
+ * Validate Spreaker OAuth app credentials (CLIENT_ID and CLIENT_SECRET)
+ * This helps distinguish between credential issues vs token expiration issues
+ * @param {string} client_id - Spreaker app client ID
+ * @param {string} client_secret - Spreaker app client secret  
+ * @returns {Promise<Object>} Validation result with success/error details
+ */
+async function validateSprekerCredentials(client_id, client_secret) {
+  if (!client_id || !client_secret) {
+    return {
+      valid: false,
+      reason: 'CLIENT_ID or CLIENT_SECRET is missing',
+      suggestion: 'Check SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET environment variables'
+    };
+  }
+
+  if (typeof client_id !== 'string' || typeof client_secret !== 'string') {
+    return {
+      valid: false,
+      reason: 'CLIENT_ID or CLIENT_SECRET must be strings',
+      suggestion: 'Verify the credential format in your environment variables'
+    };
+  }
+
+  // Basic format validation - Spreaker client IDs are typically numeric
+  if (!/^\d+$/.test(client_id.toString())) {
+    return {
+      valid: false,
+      reason: 'CLIENT_ID should be numeric (typical Spreaker format)',
+      suggestion: 'Verify your SPREAKER_CLIENT_ID matches the format from your Spreaker app settings'
+    };
+  }
+
+  try {
+    // Test credentials by attempting a token request with an obviously invalid refresh token
+    // This will fail due to invalid refresh token but should return a proper OAuth error
+    // If credentials are wrong, we'll get a different error (401 Unauthorized)
+    const form = new FormData();
+    form.append('grant_type', 'refresh_token');
+    form.append('client_id', client_id);
+    form.append('client_secret', client_secret);
+    form.append('refresh_token', 'invalid_test_token_for_credential_validation');
+
+    const response = await axios.post(`${BASE}/oauth2/token`, form, {
+      headers: {
+        ...form.getHeaders()
+      }
+    });
+
+    // This should not happen with our invalid test token
+    return {
+      valid: false,
+      reason: 'Unexpected success with invalid test token',
+      suggestion: 'This indicates a problem with the credential validation test'
+    };
+
+  } catch (error) {
+    if (error.response) {
+      const status = error.response.status;
+      const errorData = error.response.data;
+      
+      // 400 with invalid_grant = credentials are valid, just the refresh token is invalid (expected)
+      if (status === 400 && errorData?.error === 'invalid_grant') {
+        return {
+          valid: true,
+          reason: 'Credentials are valid (got expected invalid_grant error)',
+          suggestion: null
+        };
+      }
+      
+      // 401 Unauthorized = invalid client credentials
+      if (status === 401) {
+        return {
+          valid: false,
+          reason: 'Invalid client credentials (401 Unauthorized)',
+          suggestion: 'Verify SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET in your Spreaker app settings'
+        };
+      }
+
+      // 400 with invalid_client = invalid client credentials  
+      if (status === 400 && errorData?.error === 'invalid_client') {
+        return {
+          valid: false,
+          reason: 'Invalid client credentials (invalid_client error)',
+          suggestion: 'Check your SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET values'
+        };
+      }
+
+      // Other 400 errors might indicate other credential format issues
+      if (status === 400) {
+        return {
+          valid: false,
+          reason: `OAuth error: ${errorData?.error || 'unknown'} - ${errorData?.error_description || 'no description'}`,
+          suggestion: 'Review your Spreaker app configuration and credentials'
+        };
+      }
+
+      // Unexpected HTTP status
+      return {
+        valid: false,
+        reason: `Unexpected HTTP ${status} response during credential validation`,
+        suggestion: 'This may indicate an issue with the Spreaker API or network connectivity'
+      };
+    }
+
+    // Network or other error
+    return {
+      valid: false,
+      reason: `Network error during credential validation: ${error.message}`,
+      suggestion: 'Check network connectivity and Spreaker API availability'
+    };
+  }
+}
+
+export { validateRefreshToken, validateSprekerCredentials };
 
 export async function refreshAccessToken({ client_id, client_secret, refresh_token }) {
   const url = `${BASE}/oauth2/token`;
@@ -112,10 +226,38 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
         });
       }
       
-      // Automated notification for invalid_grant
+      // Automated notification for invalid_grant - but first check if it's a credential issue
       if (error.response.status === 400 && error.response.data?.error === 'invalid_grant') {
         console.error('');
         console.error('🔧 ACTION REQUIRED: The Spreaker refresh token has expired or is invalid.');
+        console.error('');
+        console.error('🔍 Checking if this is a credential issue vs token expiration...');
+        
+        try {
+          const credentialValidation = await validateSprekerCredentials(client_id, client_secret);
+          if (!credentialValidation.valid) {
+            console.error('🚨 CREDENTIAL ISSUE DETECTED:');
+            console.error(`   Problem: ${credentialValidation.reason}`);
+            console.error(`   Solution: ${credentialValidation.suggestion}`);
+            console.error('');
+            console.error('🔧 IMMEDIATE ACTIONS REQUIRED:');
+            console.error('   1. Verify your SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET in Railway');
+            console.error('   2. Check your Spreaker app configuration at https://www.spreaker.com/apps');
+            console.error('   3. Ensure the app permissions and redirect URI are configured correctly');
+            console.error('   4. After fixing credentials, generate a new refresh token using oauth-server.js');
+          } else {
+            console.error('✅ Credentials appear valid - this is likely a token expiration issue.');
+            console.error('');
+            console.error('🔧 TOKEN REFRESH REQUIRED:');
+            console.error('   1. The refresh token has expired and needs to be regenerated');
+            console.error('   2. Use oauth-server.js helper to get a new token');  
+            console.error('   3. Update SPREAKER_REFRESH_TOKEN environment variable in Railway');
+          }
+        } catch (validationError) {
+          console.error('⚠️  Could not validate credentials due to:', validationError.message);
+          console.error('   Proceeding with standard token refresh guidance...');
+        }
+        
         // Send email notification to admin
         await sendAdminEmail({
           to: 'nick@tryconvenient.com',
@@ -123,6 +265,21 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
           text: `The Spreaker refresh token has expired or is invalid.\n\nPlease re-authenticate using the following link: https://yourdomain.com/spreaker/re-auth\n\nCurrent token (last 8 chars): ${refresh_token ? refresh_token.slice(-8) : 'undefined'}\n\nThis typically happens when:\n1. The token has expired (refresh tokens do expire after some time)\n2. The token was already used and burned in a previous failed run\n3. The token was manually regenerated in Spreaker app settings.`
         });
         console.error('Automated email sent to admin for re-authentication.');
+      }
+
+      // Check for credential-specific errors
+      if (error.response.status === 401 || 
+          (error.response.status === 400 && error.response.data?.error === 'invalid_client')) {
+        console.error('');
+        console.error('🚨 CREDENTIAL ERROR: Invalid Spreaker app credentials detected');
+        console.error('   This indicates your SPREAKER_CLIENT_ID or SPREAKER_CLIENT_SECRET is incorrect');
+        console.error('');
+        console.error('🔧 IMMEDIATE ACTIONS REQUIRED:');
+        console.error('   1. Go to https://www.spreaker.com/apps and verify your app credentials');
+        console.error('   2. Update SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET in Railway');
+        console.error('   3. Ensure your app has the correct permissions and redirect URI');
+        console.error('   4. After fixing credentials, generate a new refresh token');
+        console.error('');
       }
     }
     throw new Error(`OAuth token refresh failed: ${error.message}`);

@@ -24,7 +24,8 @@ app.get("/", (_req, res) => {
     </ol>
     
     <h2>Ready?</h2>
-    <p><a href="/oauth/login" style="background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Connect Spreaker & Get New Token</a></p>
+    <p><a href="/validate" style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px;">🔍 Test Credentials First</a></p>
+    <p><a href="/oauth/login" style="background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">🔐 Connect Spreaker & Get New Token</a></p>
     
     <h2>Debug Info:</h2>
     <ul>
@@ -32,6 +33,9 @@ app.get("/", (_req, res) => {
       <li>Client Secret: ${CLIENT_SECRET ? '✅ Set' : '❌ Missing'}</li>
       <li>Redirect URI: ${REDIRECT_URI}</li>
     </ul>
+    
+    <h2>Troubleshooting:</h2>
+    <p>If you're experiencing OAuth issues, <strong>test your credentials first</strong> before attempting the full OAuth flow.</p>
   `);
 });
 
@@ -46,6 +50,111 @@ app.get("/health", (_req, res) => {
       state: STATE
     }
   });
+});
+
+app.get("/validate", async (_req, res) => {
+  console.log("Testing Spreaker app credentials...");
+  
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    return res.status(400).send(`
+      <h2>❌ Missing Credentials</h2>
+      <p>CLIENT_ID: ${CLIENT_ID ? '✅ Set' : '❌ Missing'}</p>
+      <p>CLIENT_SECRET: ${CLIENT_SECRET ? '✅ Set' : '❌ Missing'}</p>
+      <p><a href="/">← Back</a></p>
+    `);
+  }
+  
+  try {
+    // Test credentials with an invalid refresh token to see if we get the right error
+    const body = new URLSearchParams();
+    body.set("grant_type", "refresh_token");
+    body.set("client_id", CLIENT_ID);
+    body.set("client_secret", CLIENT_SECRET);
+    body.set("refresh_token", "invalid_test_token_for_credential_validation");
+
+    const response = await axios.post(
+      "https://api.spreaker.com/oauth2/token",
+      body.toString(),
+      { 
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        validateStatus: () => true // Don't throw on 4xx/5xx
+      }
+    );
+
+    const status = response.status;
+    const data = response.data;
+
+    if (status === 400 && data?.error === 'invalid_grant') {
+      // This is the expected response - credentials are valid
+      res.send(`
+        <h2>✅ Credentials Valid!</h2>
+        <p>Your Spreaker app credentials are working correctly.</p>
+        <p><strong>Status:</strong> Got expected 'invalid_grant' error (400) - this confirms credentials are valid</p>
+        <p><strong>Next step:</strong> <a href="/oauth/login" style="background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Start OAuth Flow</a></p>
+        <p><a href="/">← Back</a></p>
+        
+        <h3>Technical Details:</h3>
+        <pre>${JSON.stringify({ status, data }, null, 2)}</pre>
+      `);
+    } else if (status === 401) {
+      res.status(400).send(`
+        <h2>❌ Invalid Credentials</h2>
+        <p><strong>Problem:</strong> HTTP 401 Unauthorized</p>
+        <p><strong>Cause:</strong> Your SPREAKER_CLIENT_ID or SPREAKER_CLIENT_SECRET is incorrect</p>
+        <p><strong>Solution:</strong></p>
+        <ol>
+          <li>Go to <a href="https://www.spreaker.com/apps" target="_blank">https://www.spreaker.com/apps</a></li>
+          <li>Check your app's Client ID and Client Secret</li>
+          <li>Update your environment variables</li>
+          <li>Try again</li>
+        </ol>
+        <p><a href="/">← Back</a></p>
+        
+        <h3>Technical Details:</h3>
+        <pre>${JSON.stringify({ status, data }, null, 2)}</pre>
+      `);
+    } else if (status === 400 && data?.error === 'invalid_client') {
+      res.status(400).send(`
+        <h2>❌ Invalid Client</h2>
+        <p><strong>Problem:</strong> Spreaker returned 'invalid_client' error</p>
+        <p><strong>Cause:</strong> Your app credentials don't match Spreaker's records</p>
+        <p><strong>Solution:</strong></p>
+        <ol>
+          <li>Verify your SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET</li>
+          <li>Ensure your Spreaker app is active and properly configured</li>
+          <li>Check that redirect URI matches: <code>${REDIRECT_URI}</code></li>
+        </ol>
+        <p><a href="/">← Back</a></p>
+        
+        <h3>Technical Details:</h3>
+        <pre>${JSON.stringify({ status, data }, null, 2)}</pre>
+      `);
+    } else {
+      res.status(500).send(`
+        <h2>⚠️  Unexpected Response</h2>
+        <p><strong>Status:</strong> HTTP ${status}</p>
+        <p><strong>Expected:</strong> 400 with 'invalid_grant' error</p>
+        <p><strong>This might indicate:</strong></p>
+        <ul>
+          <li>Network connectivity issues</li>
+          <li>Spreaker API changes</li>
+          <li>Rate limiting</li>
+        </ul>
+        <p><a href="/">← Back</a></p>
+        
+        <h3>Technical Details:</h3>
+        <pre>${JSON.stringify({ status, data }, null, 2)}</pre>
+      `);
+    }
+  } catch (error) {
+    console.error("Credential validation error:", error.message);
+    res.status(500).send(`
+      <h2>❌ Validation Failed</h2>
+      <p><strong>Error:</strong> ${error.message}</p>
+      <p>This might indicate network connectivity issues or Spreaker API problems.</p>
+      <p><a href="/">← Back</a></p>
+    `);
+  }
 });
 
 app.get("/oauth/login", (_req, res) => {

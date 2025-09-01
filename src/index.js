@@ -11,7 +11,7 @@ import { EPISODE_STRUCTURES, createSectionPrompt, createTitlePrompt, createDescr
 import { chatComplete } from './openai-text.js';
 import { synthesizeToMp3 } from './tts.js';
 import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
-import { refreshAccessToken, uploadEpisode, validateRefreshToken } from './spreaker.js';
+import { refreshAccessToken, uploadEpisode, validateRefreshToken, validateSprekerCredentials } from './spreaker.js';
 
 // Global counters for tracking OAuth operations
 let oauthOperationCount = {
@@ -101,6 +101,35 @@ async function validateTokenAtStartup() {
   
   if (!currentRefreshToken) {
     throw new Error('No SPREAKER_REFRESH_TOKEN environment variable found. Please set this before deployment.');
+  }
+
+  // First validate credentials before attempting token refresh
+  console.log('🔐 Validating Spreaker app credentials...');
+  try {
+    const credentialValidation = await validateSprekerCredentials(
+      process.env.SPREAKER_CLIENT_ID, 
+      process.env.SPREAKER_CLIENT_SECRET
+    );
+    
+    if (!credentialValidation.valid) {
+      console.error('❌ Spreaker credential validation failed:', credentialValidation.reason);
+      console.error('💡 Suggestion:', credentialValidation.suggestion);
+      console.error('');
+      console.error('🔧 CREDENTIAL ISSUE - Fix before proceeding:');
+      console.error('   1. Verify SPREAKER_CLIENT_ID and SPREAKER_CLIENT_SECRET in Railway');
+      console.error('   2. Check your Spreaker app settings at https://www.spreaker.com/apps');
+      console.error('   3. Ensure redirect URI matches your Railway deployment URL');
+      throw new Error(`Invalid Spreaker credentials: ${credentialValidation.reason}`);
+    }
+    
+    console.log('✅ Spreaker app credentials are valid');
+  } catch (credentialError) {
+    // If credential validation fails due to network issues, log but continue
+    if (credentialError.message.includes('Network error') || credentialError.message.includes('connectivity')) {
+      console.warn('⚠️  Could not validate credentials due to network issues, proceeding with token test...');
+    } else {
+      throw credentialError; // Re-throw credential validation errors
+    }
   }
 
   // Basic validation
