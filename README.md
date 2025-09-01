@@ -6,6 +6,19 @@ This Cron job runs once per week on Railway and will:
 - TTS with `gpt-4o-mini-tts` (voice `fable`)
 - Upload to Spreaker and mark the sheet row as generated
 
+## 📚 Complete Documentation
+
+**→ [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md) - Start here for all documentation**
+
+The documentation includes:
+- Complete manual workflow instructions
+- API command references  
+- Troubleshooting guides
+- System diagnostic tools
+- Step-by-step examples
+
+Use these resources when the automation fails or when you need to understand the process in detail.
+
 ## Spreaker Token Management Fix
 
 **PROBLEM RESOLVED**: The app now provides comprehensive OAuth token management that eliminates continual 400 "invalid_grant" errors.
@@ -147,3 +160,39 @@ For automatic token updates, ensure these are configured:
 - `RAILWAY_ENVIRONMENT_ID` - Railway environment ID (defaults to 'production')
 
 If these are missing, token updates will be logged for manual application.
+
+## Manual Workflow Documentation
+
+If you need to understand the automation process or execute it manually:
+
+- **[MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md)** - Complete step-by-step manual workflow instructions
+- **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** - Quick reference guide with essential commands
+- **[EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)** - Detailed example of processing one episode manually
+- **[diagnostics.sh](./diagnostics.sh)** - System diagnostic script to check configuration
+
+These documents provide:
+- Detailed explanations of each automation step
+- API commands and examples
+- Troubleshooting guidance
+- Emergency procedures
+- Environment setup instructions
+
+Use these resources when:
+- The automation fails and needs manual intervention
+- You want to understand what the system does behind the scenes
+- You need to process episodes manually during system maintenance
+- You're troubleshooting OAuth token issues
+
+### Quick System Check
+
+Run the diagnostic script to verify your setup:
+
+```bash
+./diagnostics.sh
+```
+
+This will check:
+- Required tools and dependencies
+- Environment variables
+- API connectivity
+- File system permissions
