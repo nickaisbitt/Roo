@@ -6,9 +6,41 @@ This Cron job runs once per week on Railway and will:
 - TTS with `gpt-4o-mini-tts` (voice `fable`)
 - Upload to Spreaker and mark the sheet row as generated
 
+## Spreaker Token Management Fix
+
+**PROBLEM SOLVED**: The app no longer burns through Spreaker refresh tokens on multiple uses within the same process execution.
+
+### What Was Fixed
+
+The previous implementation had a critical issue where Spreaker's one-time-use refresh tokens would get "burned" on first use:
+
+1. ❌ **Old behavior**: `process.env.SPREAKER_REFRESH_TOKEN` was read once at startup
+2. ❌ First API call succeeded and returned a new refresh token
+3. ❌ New token was saved to Railway for *future* deployments
+4. ❌ Current process continued using the old (now invalid) token
+5. ❌ Subsequent calls failed with `invalid_grant` error
+
+### How It's Fixed
+
+The new implementation maintains refresh token state throughout the process execution:
+
+1. ✅ **New behavior**: `currentRefreshToken` variable tracks the active token
+2. ✅ First API call succeeds and returns a new refresh token
+3. ✅ **IMMEDIATELY** updates `currentRefreshToken` in the current process
+4. ✅ Updates Railway environment for future deployments (async)
+5. ✅ Subsequent calls use the updated token and succeed
+
+### Key Components
+
+- **`safeRefreshAccessToken()`**: Manages token state and Railway updates
+- **`safeUploadEpisode()`**: Automatically retries with fresh token on auth failures
+- **Process-level state**: `currentRefreshToken` variable maintains current valid token
+- **Enhanced logging**: Better visibility into token refresh operations
+- **Graceful error handling**: Prevents restart loops from token issues
+
 ## Automatic Refresh Token Update
 
-The application now automatically updates the Spreaker refresh token in Railway when a new one is received, preventing restart loops due to expired tokens.
+The application automatically updates the Spreaker refresh token in Railway when a new one is received, preventing restart loops due to expired tokens.
 
 ### Required Environment Variables for Auto-Update:
 - `RAILWAY_API_TOKEN` - Railway API token (get from https://railway.app/account/tokens)
@@ -16,3 +48,13 @@ The application now automatically updates the Spreaker refresh token in Railway 
 - `RAILWAY_ENVIRONMENT_ID` - Railway environment ID (defaults to 'production')
 
 If these variables are not set, the app will log the new refresh token for manual update.
+
+## Deployment Notes
+
+After deploying this fix:
+1. The app will automatically manage token refreshes during execution
+2. No more manual token regeneration needed due to burning
+3. Long-running processes can handle multiple episode uploads
+4. Railway environment variables get updated for future runs
+
+**The token burning issue is now completely resolved!**
