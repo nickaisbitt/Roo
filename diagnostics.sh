@@ -186,6 +186,41 @@ fi
 
 # Test Spreaker API (token refresh)
 if [ -n "$SPREAKER_CLIENT_ID" ] && [ -n "$SPREAKER_CLIENT_SECRET" ] && [ -n "$SPREAKER_REFRESH_TOKEN" ]; then
+    echo "Testing Spreaker API credentials first..."
+    
+    # Test credentials with invalid refresh token to validate app credentials
+    credential_response=$(curl -s -w "%{http_code}" -o /tmp/spreaker_credential_test.json \
+        -X POST https://api.spreaker.com/oauth2/token \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "grant_type=refresh_token" \
+        -d "client_id=$SPREAKER_CLIENT_ID" \
+        -d "client_secret=$SPREAKER_CLIENT_SECRET" \
+        -d "refresh_token=invalid_test_token_for_credential_validation")
+    
+    if [ "$credential_response" = "400" ]; then
+        # Check if it's the expected invalid_grant error (credentials valid)
+        if command_exists jq && [ -f /tmp/spreaker_credential_test.json ]; then
+            error_type=$(jq -r '.error // empty' /tmp/spreaker_credential_test.json 2>/dev/null)
+            if [ "$error_type" = "invalid_grant" ]; then
+                echo -e "✅ ${GREEN}Spreaker Credentials${NC} - Valid (got expected invalid_grant error)"
+            elif [ "$error_type" = "invalid_client" ]; then
+                echo -e "❌ ${RED}Spreaker Credentials${NC} - Invalid client credentials"
+                ((env_errors++))
+            else
+                echo -e "⚠️  ${YELLOW}Spreaker Credentials${NC} - Unexpected error: $error_type"
+            fi
+        else
+            echo -e "⚠️  ${YELLOW}Spreaker Credentials${NC} - Could not parse response (jq not available)"
+        fi
+    elif [ "$credential_response" = "401" ]; then
+        echo -e "❌ ${RED}Spreaker Credentials${NC} - Invalid credentials (401 Unauthorized)"
+        ((env_errors++))
+    else
+        echo -e "⚠️  ${YELLOW}Spreaker Credentials${NC} - Unexpected HTTP response: $credential_response"
+    fi
+    
+    rm -f /tmp/spreaker_credential_test.json
+    
     echo "Testing Spreaker API (token refresh)..."
     
     response=$(curl -s -w "%{http_code}" -o /tmp/spreaker_test.json \
@@ -212,6 +247,16 @@ if [ -n "$SPREAKER_CLIENT_ID" ] && [ -n "$SPREAKER_CLIENT_SECRET" ] && [ -n "$SP
         if [ -f /tmp/spreaker_test.json ]; then
             error_msg=$(cat /tmp/spreaker_test.json 2>/dev/null | head -n5)
             echo "   Error: $error_msg"
+            
+            # Additional guidance based on error
+            if command_exists jq; then
+                error_type=$(echo "$error_msg" | jq -r '.error // empty' 2>/dev/null)
+                if [ "$error_type" = "invalid_grant" ]; then
+                    echo "   💡 This suggests the refresh token has expired - generate a new one"
+                elif [ "$error_type" = "invalid_client" ]; then
+                    echo "   💡 This suggests invalid credentials - check CLIENT_ID and CLIENT_SECRET"  
+                fi
+            fi
         fi
         ((env_errors++))
     fi
