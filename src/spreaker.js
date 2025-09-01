@@ -69,7 +69,8 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     
     // Return both access token and any new refresh token provided
     const result = { 
-      access_token: res.data.access_token 
+      access_token: res.data.access_token,
+      expires_in: res.data.expires_in // Include expiration time for proactive management
     };
     
     // If Spreaker provides a new refresh token, include it in the response
@@ -84,12 +85,29 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     return result;
   } catch (error) {
     console.error('Failed to refresh Spreaker access token:', error.message);
+    
+    // Enhanced debugging information
+    console.error('Error details:', {
+      errorType: error.constructor.name,
+      hasResponse: !!error.response,
+      timestamp: new Date().toISOString()
+    });
+    
     if (error.response) {
       console.error('OAuth Error Response:', {
         status: error.response.status,
         statusText: error.response.statusText,
         data: error.response.data
       });
+      
+      // Enhanced error analysis
+      if (error.response.headers) {
+        console.error('Response headers (for debugging):', {
+          'content-type': error.response.headers['content-type'],
+          'x-ratelimit-remaining': error.response.headers['x-ratelimit-remaining'],
+          'x-ratelimit-reset': error.response.headers['x-ratelimit-reset']
+        });
+      }
       
       // Provide helpful guidance for common OAuth errors
       if (error.response.status === 400 && error.response.data?.error === 'invalid_grant') {
