@@ -2,6 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import { sendAdminEmail } from './sendAdminEmail.js';
+import { getCurrentTimestamp, detectClockDrift, logTimestampedEvent } from './time-utils.js';
 
 const BASE = 'https://api.spreaker.com';
 
@@ -148,17 +149,32 @@ async function validateSprekerCredentials(client_id, client_secret) {
 export { validateRefreshToken, validateSprekerCredentials };
 
 export async function refreshAccessToken({ client_id, client_secret, refresh_token }) {
+  const startTime = getCurrentTimestamp();
   const url = `${BASE}/oauth2/token`;
   
-  console.log('Refreshing Spreaker access token...');
-  console.log(`Using refresh token (last 8 chars): ${refresh_token ? refresh_token.slice(-8) : 'undefined'}`);
+  logTimestampedEvent('Token refresh started', {
+    endpoint: url,
+    refresh_token_suffix: refresh_token ? refresh_token.slice(-8) : 'undefined',
+    client_id: client_id
+  });
+  
+  // Check for system clock drift before making OAuth request
+  const clockDrift = detectClockDrift(2);
+  if (clockDrift.hasDrift) {
+    console.warn(`⏰ Clock drift detected before token refresh: ${clockDrift.driftSeconds.toFixed(2)}s`);
+  }
   
   // Validate the refresh token before making the API call
   const validation = validateRefreshToken(refresh_token);
   if (!validation.valid) {
+    const errorMsg = `Invalid refresh token: ${validation.reason}`;
+    logTimestampedEvent('Token refresh validation failed', { 
+      reason: validation.reason,
+      error: errorMsg 
+    });
     console.error('❌ Invalid refresh token detected before API call:', validation.reason);
     console.error('🔧 Please check your SPREAKER_REFRESH_TOKEN environment variable');
-    throw new Error(`Invalid refresh token: ${validation.reason}`);
+    throw new Error(errorMsg);
   }
   
   // Create a fresh FormData instance for each request
@@ -175,47 +191,89 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
   }
 
   try {
+    const requestTime = getCurrentTimestamp();
+    logTimestampedEvent('Sending OAuth token request', { request_time: requestTime });
+    
     const res = await axios.post(url, form, {
       headers: {
         ...form.getHeaders()
       }
     });
     
-    console.log('Successfully refreshed Spreaker access token');
-    console.log(`Access token received (expires in ${res.data.expires_in || 'unknown'} seconds)`);
+    const responseTime = getCurrentTimestamp();
+    const successMsg = 'Successfully refreshed Spreaker access token';
+    
+    logTimestampedEvent('Token refresh completed successfully', {
+      access_token_present: !!res.data.access_token,
+      expires_in: res.data.expires_in,
+      new_refresh_token_present: !!res.data.refresh_token,
+      new_refresh_token_suffix: res.data.refresh_token ? res.data.refresh_token.slice(-8) : null,
+      response_time: responseTime,
+      request_duration_ms: new Date(responseTime) - new Date(requestTime)
+    });
+    
+    console.log('✅', successMsg);
+    console.log(`🕒 Access token expires in ${res.data.expires_in || 'unknown'} seconds`);
     
     // Return both access token and any new refresh token provided
     const result = { 
       access_token: res.data.access_token,
-      expires_in: res.data.expires_in // Include expiration time for proactive management
+      expires_in: res.data.expires_in, // Include expiration time for proactive management
+      issued_at: getCurrentTimestamp() // Add timestamp for better tracking
     };
     
-    // If Spreaker provides a new refresh token, include it in the response
+    // Critical: If Spreaker provides a new refresh token, include it in the response
+    // This ensures one-time-use token rotation is properly handled
     if (res.data.refresh_token) {
       result.refresh_token = res.data.refresh_token;
-      console.log(`⚠️  New refresh token received: ${res.data.refresh_token.slice(-8)}`);
+      
+      // Log token rotation with masked data
+      logTimestampedEvent('New refresh token received - token rotation required', {
+        old_token_suffix: refresh_token ? refresh_token.slice(-8) : null,
+        new_token_suffix: res.data.refresh_token.slice(-8),
+        token_changed: res.data.refresh_token !== refresh_token,
+        rotation_timestamp: getCurrentTimestamp()
+      });
+      
+      console.log(`🔄 New refresh token received: ${res.data.refresh_token.slice(-8)}`);
       console.log('⚠️  Update SPREAKER_REFRESH_TOKEN environment variable to:', res.data.refresh_token);
     } else {
+      logTimestampedEvent('No new refresh token provided - current token remains valid', {
+        current_token_suffix: refresh_token ? refresh_token.slice(-8) : null
+      });
       console.log('✅ No new refresh token provided - current token remains valid');
     }
     
     return result;
   } catch (error) {
-    console.error('Failed to refresh Spreaker access token:', error.message);
+    const errorTime = getCurrentTimestamp();
+    logTimestampedEvent('Token refresh failed', {
+      error_type: error.constructor.name,
+      has_response: !!error.response,
+      error_message: error.message,
+      error_time: errorTime,
+      request_duration_ms: new Date(errorTime) - new Date(startTime)
+    });
     
-    // Enhanced debugging information
+    console.error('❌ Failed to refresh Spreaker access token:', error.message);
+    
+    // Enhanced debugging information with timestamps
     console.error('Error details:', {
       errorType: error.constructor.name,
       hasResponse: !!error.response,
-      timestamp: new Date().toISOString()
+      timestamp: errorTime,
+      requestStartTime: startTime
     });
     
     if (error.response) {
-      console.error('OAuth Error Response:', {
+      const responseError = {
         status: error.response.status,
         statusText: error.response.statusText,
         data: error.response.data
-      });
+      };
+      
+      logTimestampedEvent('OAuth API error response', responseError);
+      console.error('OAuth Error Response:', responseError);
       
       // Enhanced error analysis
       if (error.response.headers) {

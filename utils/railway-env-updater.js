@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getCurrentTimestamp, logTimestampedEvent } from '../src/time-utils.js';
 
 /**
  * Railway Environment Variable Updater
@@ -73,6 +74,15 @@ async function updateRailwayEnvVar({
   }
 
   try {
+    const requestTime = getCurrentTimestamp();
+    logTimestampedEvent('Railway API request starting', {
+      endpoint: `${baseUrl}/graphql/v2`,
+      variable_name: variableName,
+      variable_value_suffix: typeof variableValue === 'string' && variableValue.length > 8 
+        ? variableValue.slice(-8) : '[masked]',
+      request_time: requestTime
+    });
+    
     // GraphQL mutation to update environment variable
     const mutation = `
       mutation variableUpsert($input: VariableUpsertInput!) {
@@ -109,10 +119,26 @@ async function updateRailwayEnvVar({
       }
     );
 
+    const responseTime = getCurrentTimestamp();
+    const duration = new Date(responseTime) - new Date(requestTime);
+    
     // Check for GraphQL errors
     if (response.data.errors) {
-      throw new Error(`GraphQL errors: ${JSON.stringify(response.data.errors)}`);
+      const errorMsg = `GraphQL errors: ${JSON.stringify(response.data.errors)}`;
+      logTimestampedEvent('Railway API GraphQL error', {
+        errors: response.data.errors,
+        duration_ms: duration,
+        response_time: responseTime
+      });
+      throw new Error(errorMsg);
     }
+
+    logTimestampedEvent('Railway API request completed successfully', {
+      duration_ms: duration,
+      response_time: responseTime,
+      updated_variable: response.data.data.variableUpsert?.name,
+      variable_id: response.data.data.variableUpsert?.id
+    });
 
     // Return the updated variable data
     return response.data.data.variableUpsert;
@@ -139,6 +165,7 @@ async function updateRailwayEnvVar({
 
 /**
  * Convenience function specifically for updating the SPREAKER_REFRESH_TOKEN
+ * Enhanced with comprehensive logging and validation for token rotation
  * 
  * @param {Object} config - Configuration object
  * @param {string} config.apiToken - Railway API token (required)
@@ -154,13 +181,50 @@ async function updateSpeakerRefreshToken({
   environmentId,
   refreshToken
 }) {
-  return updateRailwayEnvVar({
-    apiToken,
-    projectId,
-    environmentId,
-    variableName: 'SPREAKER_REFRESH_TOKEN',
-    variableValue: refreshToken
+  const startTime = getCurrentTimestamp();
+  
+  logTimestampedEvent('Railway environment update started', {
+    project_id: projectId,
+    environment_id: environmentId,
+    variable_name: 'SPREAKER_REFRESH_TOKEN',
+    new_token_suffix: refreshToken ? refreshToken.slice(-8) : 'undefined',
+    start_time: startTime
   });
+  
+  try {
+    const result = await updateRailwayEnvVar({
+      apiToken,
+      projectId,
+      environmentId,
+      variableName: 'SPREAKER_REFRESH_TOKEN',
+      variableValue: refreshToken
+    });
+    
+    const endTime = getCurrentTimestamp();
+    const duration = new Date(endTime) - new Date(startTime);
+    
+    logTimestampedEvent('Railway environment update completed successfully', {
+      duration_ms: duration,
+      end_time: endTime,
+      updated_token_suffix: refreshToken ? refreshToken.slice(-8) : 'undefined'
+    });
+    
+    return result;
+    
+  } catch (error) {
+    const errorTime = getCurrentTimestamp();
+    const duration = new Date(errorTime) - new Date(startTime);
+    
+    logTimestampedEvent('Railway environment update failed', {
+      error_message: error.message,
+      error_type: error.constructor.name,
+      duration_ms: duration,
+      error_time: errorTime,
+      failed_token_suffix: refreshToken ? refreshToken.slice(-8) : 'undefined'
+    });
+    
+    throw error;
+  }
 }
 
 /**
