@@ -49,6 +49,47 @@ const PUBLISH_TIME=process.env.SPREAKER_PUBLISH_TIME_UTC||'08:00:00';
 
 // Token state management - maintains current refresh token during process execution
 let currentRefreshToken = process.env.SPREAKER_REFRESH_TOKEN;
+let currentAccessToken = null;
+let tokenExpiresAt = null;
+let refreshInProgress = false;
+
+/**
+ * Get current token status for debugging and monitoring
+ * @returns {Object} Token status information
+ */
+function getTokenStatus() {
+  return {
+    hasRefreshToken: !!currentRefreshToken,
+    hasAccessToken: !!currentAccessToken,
+    isExpired: isTokenExpired(),
+    expiresAt: tokenExpiresAt ? new Date(tokenExpiresAt).toISOString() : null,
+    refreshInProgress: refreshInProgress,
+    refreshTokenLastChars: currentRefreshToken ? currentRefreshToken.slice(-8) : null
+  };
+}
+
+/**
+ * Check if current access token is expired or will expire within the buffer time
+ * @param {number} bufferMinutes - Minutes before expiration to consider token expired (default: 5)
+ * @returns {boolean} True if token is expired or will expire soon
+ */
+function isTokenExpired(bufferMinutes = 5) {
+  if (!tokenExpiresAt) return true;
+  const now = Date.now();
+  const bufferMs = bufferMinutes * 60 * 1000;
+  return now >= (tokenExpiresAt - bufferMs);
+}
+
+/**
+ * Sleep for a specified duration with jitter for retry backoff
+ * @param {number} ms - Base milliseconds to sleep
+ * @param {number} jitterPercent - Percentage of jitter to add (default: 10%)
+ */
+async function sleep(ms, jitterPercent = 10) {
+  const jitter = Math.random() * (ms * jitterPercent / 100);
+  const sleepTime = ms + jitter;
+  await new Promise(resolve => setTimeout(resolve, sleepTime));
+}
 
 /**
  * Validate refresh token at startup to catch expired tokens early
@@ -124,66 +165,77 @@ async function updateRailwayEnvironment(newRefreshToken, context = 'token refres
   const projectId = process.env.RAILWAY_PROJECT_ID;
   const environmentId = process.env.RAILWAY_ENVIRONMENT_ID || 'production';
   
-  if (railwayApiToken && projectId) {
-    let attempts = 0;
-    const maxAttempts = 3;
-    
-    while (attempts < maxAttempts) {
-      try {
-        attempts++;
-        oauthOperationCount.railwayUpdates++;
-        console.log(`🚀 Updating Railway environment (attempt ${attempts}/${maxAttempts}) - context: ${context}...`);
-        
-        const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
-        await updateSpeakerRefreshToken({
-          apiToken: railwayApiToken,
-          projectId: projectId,
-          environmentId: environmentId,
-          refreshToken: newRefreshToken
-        });
-        
-        console.log('✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment');
-        return;
-      } catch (updateError) {
-        console.error(`⚠️  Railway update attempt ${attempts} failed:`, updateError.message);
-        
-        if (attempts < maxAttempts) {
-          const waitTime = Math.pow(2, attempts) * 1000; // Exponential backoff
-          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        } else {
-          console.error('❌ Failed to automatically update Railway environment variable after all attempts');
-          console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
-          // Log stats to help with debugging Railway API issues
-          logOAuthStats('Railway update failure');
-        }
-      }
-    }
-  } else {
+  if (!railwayApiToken || !projectId) {
     console.log('⚠️  Cannot auto-update Railway environment variable (missing RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID)');
-    console.log('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
+    console.log('   Please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
+    return;
+  }
+  
+  try {
+    const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
+    await updateSpeakerRefreshToken({
+      apiToken: railwayApiToken,
+      projectId: projectId,
+      environmentId: environmentId,
+      refreshToken: newRefreshToken
+    });
+    oauthOperationCount.railwayUpdates++;
+    console.log(`✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment (${context})`);
+  } catch (updateError) {
+    console.error(`⚠️  Failed to automatically update Railway environment variable during ${context}:`, updateError.message);
+    console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
   }
 }
+
+
 
 /**
  * Safely refresh Spreaker access token and update current refresh token state
  * This prevents the token burning issue by maintaining token state within the process
+ * Includes proactive refresh, retry logic, and concurrency control
  */
 async function safeRefreshAccessToken() {
+  // If we have a valid access token that's not expired, return it
+  if (currentAccessToken && !isTokenExpired()) {
+    console.log('✅ Using existing valid access token');
+    return currentAccessToken;
+  }
+
+  // Prevent concurrent refresh attempts
+  if (refreshInProgress) {
+    console.log('⏳ Token refresh already in progress, waiting...');
+    // Wait for existing refresh to complete (up to 30 seconds)
+    for (let i = 0; i < 30; i++) {
+      await sleep(1000);
+      if (!refreshInProgress) {
+        if (currentAccessToken && !isTokenExpired()) {
+          console.log('✅ Token refresh completed by another process');
+          return currentAccessToken;
+        }
+        break;
+      }
+    }
+    // If still in progress after 30s, proceed anyway to avoid deadlock
+    if (refreshInProgress) {
+      console.warn('⚠️ Token refresh taking too long, proceeding with new refresh attempt');
+    }
+  }
+
+  refreshInProgress = true;
   console.log('🔑 Refreshing Spreaker access token using current refresh token...');
   
   if (!currentRefreshToken) {
+    refreshInProgress = false;
     throw new Error('No refresh token available. Please check SPREAKER_REFRESH_TOKEN environment variable.');
   }
   
-  let attempts = 0;
-  const maxAttempts = 3;
+  const maxRetries = 3;
+  const baseDelay = 1000; // Start with 1 second
   
-  while (attempts < maxAttempts) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      attempts++;
       oauthOperationCount.refreshAttempts++;
-      console.log(`🔄 Token refresh attempt ${attempts}/${maxAttempts}...`);
+      console.log(`🔄 Token refresh attempt ${attempt}/${maxRetries}`);
       
       const tokenResult = await refreshAccessToken({ 
         client_id: process.env.SPREAKER_CLIENT_ID, 
@@ -193,6 +245,14 @@ async function safeRefreshAccessToken() {
       
       oauthOperationCount.refreshSuccesses++;
       const accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
+      const expiresInSeconds = tokenResult.expires_in || 3600; // Default to 1 hour if not provided
+      
+      // Update current token state
+      currentAccessToken = accessToken;
+      tokenExpiresAt = Date.now() + (expiresInSeconds * 1000);
+      
+      console.log(`✅ Access token refreshed successfully (expires in ${expiresInSeconds} seconds)`);
+      console.log(`🕒 Token expires at: ${new Date(tokenExpiresAt).toISOString()}`);
       
       // Critical: If Spreaker provided a new refresh token, update our current state immediately
       if (tokenResult.refresh_token && tokenResult.refresh_token !== currentRefreshToken) {
@@ -202,43 +262,54 @@ async function safeRefreshAccessToken() {
         const oldToken = currentRefreshToken;
         currentRefreshToken = tokenResult.refresh_token;
         
-        console.log(`🔑 Token updated in process: ${oldToken.slice(-8)} -> ${currentRefreshToken.slice(-8)}`);
+        console.log(`🔑 Refresh token updated in process: ${oldToken.slice(-8)} -> ${currentRefreshToken.slice(-8)}`);
         
         // Then attempt to update Railway environment variable for future runs
         await updateRailwayEnvironment(currentRefreshToken, 'token refresh');
       }
       
+      refreshInProgress = false;
       return accessToken;
+      
     } catch (error) {
-      oauthOperationCount.refreshFailures++;
-      console.error(`❌ OAuth token refresh attempt ${attempts} failed:`, error.message);
+      console.error(`❌ Token refresh attempt ${attempt}/${maxRetries} failed:`, error.message);
       
-      if (attempts < maxAttempts && !error.message.includes('invalid_grant')) {
-        // Only retry if it's not an invalid_grant error (which won't be fixed by retrying)
-        const waitTime = Math.pow(2, attempts) * 1000; // Exponential backoff: 2s, 4s
-        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      
-      // Log the final error with context
-      console.error('❌ Final OAuth token refresh failure after all attempts');
-      console.error('   Current refresh token (last 8 chars):', currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined');
-      
-      // Provide additional guidance for invalid_grant errors
+      // Check if this is an invalid_grant error that won't be resolved by retrying
       if (error.message.includes('invalid_grant') || error.message.includes('Invalid refresh token')) {
         console.error('');
-        console.error('💡 This appears to be an expired or invalid refresh token issue.');
-        console.error('   The token stored in Railway environment variables needs to be regenerated.');
-        console.error('   Use the oauth-server.js helper to get a new token, or manually regenerate');
-        console.error('   from your Spreaker app settings.');
+        console.error('🚨 CRITICAL: Invalid refresh token detected - retries will not help.');
+        console.error('   The refresh token stored in Railway environment variables is expired or invalid.');
+        console.error('   This requires manual intervention:');
+        console.error('   1. Use the oauth-server.js helper to get a new token, or');
+        console.error('   2. Manually regenerate from your Spreaker app settings');
+        console.error(`   Current token (last 8 chars): ${currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined'}`);
         console.error('');
+        refreshInProgress = false;
+        oauthOperationCount.refreshFailures++;
+        logOAuthStats('invalid_grant error');
+        throw error;
       }
       
-      // Log stats for debugging recurring issues
-      logOAuthStats('token refresh failure');
-      
-      throw error;
+      // For other errors, continue retry logic if attempts remain
+      oauthOperationCount.refreshFailures++;
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
+        console.log(`⏳ Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        await sleep(delay);
+        continue;
+      } else {
+        // All retries exhausted
+        console.error('');
+        console.error('❌ All token refresh attempts failed. This could indicate:');
+        console.error('   1. Network connectivity issues');
+        console.error('   2. Spreaker API is temporarily unavailable');
+        console.error('   3. Invalid client credentials');
+        console.error('   4. Rate limiting from too many requests');
+        console.error('');
+        refreshInProgress = false;
+        logOAuthStats('token refresh failure');
+        throw error;
+      }
     }
   }
 }
@@ -246,15 +317,25 @@ async function safeRefreshAccessToken() {
 /**
  * Upload episode with automatic token refresh on auth failure
  * This handles cases where access token expires during long-running processes
+ * Now uses the improved token management with proactive refresh
  */
-async function safeUploadEpisode(currentAccessToken, uploadParams) {
-  let attempts = 0;
+async function safeUploadEpisode(providedAccessToken, uploadParams) {
+  // Use proactive token management - get a fresh token if needed
+  let accessToken = providedAccessToken;
+  
+  // Check if we should proactively refresh the token
+  if (!accessToken || isTokenExpired()) {
+    console.log('🔄 Proactively refreshing access token before upload...');
+    accessToken = await safeRefreshAccessToken();
+  }
+  
   const maxAttempts = 2; // Original attempt + 1 retry with refreshed token
+  let attempts = 0;
   
   while (attempts < maxAttempts) {
     try {
       attempts++;
-      const tokenToUse = attempts === 1 ? currentAccessToken : await safeRefreshAccessToken();
+      const tokenToUse = attempts === 1 ? accessToken : await safeRefreshAccessToken();
       
       if (attempts > 1) {
         oauthOperationCount.uploadRetries++;
@@ -326,11 +407,35 @@ async function generateEpisodePackage({episodeType,input}){
   return { script: combined, title: title.trim().replace(/^"|"$/g,''), description, htmlDesc, tags: sanitizeTags(tags) };
 }
 
+/**
+ * Initialize token management - ensures we have a valid access token at startup
+ * This proactively gets a token to avoid delays during episode processing
+ */
+async function initializeTokens() {
+  console.log('🚀 Initializing Spreaker token management...');
+  
+  if (!currentRefreshToken) {
+    throw new Error('SPREAKER_REFRESH_TOKEN environment variable is not set.');
+  }
+  
+  console.log(`🔑 Using refresh token (last 8 chars): ${currentRefreshToken.slice(-8)}`);
+  
+  // Get initial access token
+  const accessToken = await safeRefreshAccessToken();
+  console.log('✅ Token management initialized successfully');
+  console.log('📊 Token status:', getTokenStatus());
+  
+  return accessToken;
+}
+
 async function main(){
   console.log('Starting weekly run...');
   console.log(`Environment: EPISODE_TIMEZONE=${TZ}, MAX_EPISODES=${MAX_EPISODES}, DRY_RUN=${DRY}`);
   if(!SPREADSHEET_ID||!TAB_NAME) throw new Error('Missing Google Sheet env vars.');
   if(!SHOW_ID) throw new Error('Missing SPREAKER_SHOW_ID.');
+  
+  // Initialize token management first
+  await initializeTokens();
   
   console.log(`Reading Google Sheet: ${SPREADSHEET_ID}, tab: ${TAB_NAME}`);
   const { headers, rows } = await readTable({ spreadsheetId: SPREADSHEET_ID, tabName: TAB_NAME });
@@ -420,9 +525,10 @@ async function main(){
   let accessToken = null;
   if (!DRY) { 
     try {
-      console.log('🔍 Performing startup token validation...');
-      accessToken = await validateTokenAtStartup();
-      console.log('✅ Startup token validation successful');
+      console.log('🔍 Performing startup token validation and refresh...');
+      // Use proactive refresh approach with startup validation logging
+      accessToken = await safeRefreshAccessToken();
+      console.log('✅ Startup token validation and refresh successful');
     } catch (error) {
       console.error('❌ Startup token validation failed. Exiting gracefully to prevent restart loop.');
       console.error('   Please fix the SPREAKER_REFRESH_TOKEN environment variable and redeploy.');
