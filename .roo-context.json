@@ -1,0 +1,366 @@
+{
+  "timestamp": "2025-09-01T19:54:24.299Z",
+  "platform": {
+    "os": "linux",
+    "arch": "x64",
+    "node": "v20.19.4",
+    "cwd": "/home/runner/work/Roo/Roo"
+  },
+  "structure": {
+    "root": "/home/runner/work/Roo/Roo",
+    "files": {
+      ".gitignore": {
+        "name": ".gitignore",
+        "path": "/home/runner/work/Roo/Roo/.gitignore",
+        "relativePath": ".gitignore",
+        "size": 66,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ""
+      },
+      "DOCUMENTATION_INDEX.md": {
+        "name": "DOCUMENTATION_INDEX.md",
+        "path": "/home/runner/work/Roo/Roo/DOCUMENTATION_INDEX.md",
+        "relativePath": "DOCUMENTATION_INDEX.md",
+        "size": 4952,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "Dockerfile": {
+        "name": "Dockerfile",
+        "path": "/home/runner/work/Roo/Roo/Dockerfile",
+        "relativePath": "Dockerfile",
+        "size": 276,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ""
+      },
+      "EXAMPLE_WALKTHROUGH.md": {
+        "name": "EXAMPLE_WALKTHROUGH.md",
+        "path": "/home/runner/work/Roo/Roo/EXAMPLE_WALKTHROUGH.md",
+        "relativePath": "EXAMPLE_WALKTHROUGH.md",
+        "size": 9618,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "MANUAL_WORKFLOW.md": {
+        "name": "MANUAL_WORKFLOW.md",
+        "path": "/home/runner/work/Roo/Roo/MANUAL_WORKFLOW.md",
+        "relativePath": "MANUAL_WORKFLOW.md",
+        "size": 12761,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "QUICK_REFERENCE.md": {
+        "name": "QUICK_REFERENCE.md",
+        "path": "/home/runner/work/Roo/Roo/QUICK_REFERENCE.md",
+        "relativePath": "QUICK_REFERENCE.md",
+        "size": 5772,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "README.md": {
+        "name": "README.md",
+        "path": "/home/runner/work/Roo/Roo/README.md",
+        "relativePath": "README.md",
+        "size": 8554,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".md"
+      },
+      "diagnostics.sh": {
+        "name": "diagnostics.sh",
+        "path": "/home/runner/work/Roo/Roo/diagnostics.sh",
+        "relativePath": "diagnostics.sh",
+        "size": 8413,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".sh"
+      },
+      "oauth-server.js": {
+        "name": "oauth-server.js",
+        "path": "/home/runner/work/Roo/Roo/oauth-server.js",
+        "relativePath": "oauth-server.js",
+        "size": 4390,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "package-lock.json": {
+        "name": "package-lock.json",
+        "path": "/home/runner/work/Roo/Roo/package-lock.json",
+        "relativePath": "package-lock.json",
+        "size": 30007,
+        "modified": "2025-09-01T19:51:33.350Z",
+        "extension": ".json"
+      },
+      "package.json": {
+        "name": "package.json",
+        "path": "/home/runner/work/Roo/Roo/package.json",
+        "relativePath": "package.json",
+        "size": 555,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".json"
+      },
+      "railway.toml": {
+        "name": "railway.toml",
+        "path": "/home/runner/work/Roo/Roo/railway.toml",
+        "relativePath": "railway.toml",
+        "size": 36,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".toml"
+      },
+      "roo-dev.js": {
+        "name": "roo-dev.js",
+        "path": "/home/runner/work/Roo/Roo/roo-dev.js",
+        "relativePath": "roo-dev.js",
+        "size": 5940,
+        "modified": "2025-09-01T19:54:07.870Z",
+        "extension": ".js"
+      },
+      "src/dev-tools.js": {
+        "name": "dev-tools.js",
+        "path": "/home/runner/work/Roo/Roo/src/dev-tools.js",
+        "relativePath": "src/dev-tools.js",
+        "size": 9358,
+        "modified": "2025-09-01T19:53:36.216Z",
+        "extension": ".js"
+      },
+      "src/google.js": {
+        "name": "google.js",
+        "path": "/home/runner/work/Roo/Roo/src/google.js",
+        "relativePath": "src/google.js",
+        "size": 2159,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/index.js": {
+        "name": "index.js",
+        "path": "/home/runner/work/Roo/Roo/src/index.js",
+        "relativePath": "src/index.js",
+        "size": 30917,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/openai-text.js": {
+        "name": "openai-text.js",
+        "path": "/home/runner/work/Roo/Roo/src/openai-text.js",
+        "relativePath": "src/openai-text.js",
+        "size": 649,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/prompts.js": {
+        "name": "prompts.js",
+        "path": "/home/runner/work/Roo/Roo/src/prompts.js",
+        "relativePath": "src/prompts.js",
+        "size": 3454,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/sendAdminEmail.js": {
+        "name": "sendAdminEmail.js",
+        "path": "/home/runner/work/Roo/Roo/src/sendAdminEmail.js",
+        "relativePath": "src/sendAdminEmail.js",
+        "size": 1066,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/spreaker-re-auth.js": {
+        "name": "spreaker-re-auth.js",
+        "path": "/home/runner/work/Roo/Roo/src/spreaker-re-auth.js",
+        "relativePath": "src/spreaker-re-auth.js",
+        "size": 440,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/spreaker.js": {
+        "name": "spreaker.js",
+        "path": "/home/runner/work/Roo/Roo/src/spreaker.js",
+        "relativePath": "src/spreaker.js",
+        "size": 6722,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/tts.js": {
+        "name": "tts.js",
+        "path": "/home/runner/work/Roo/Roo/src/tts.js",
+        "relativePath": "src/tts.js",
+        "size": 1461,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/utils.js": {
+        "name": "utils.js",
+        "path": "/home/runner/work/Roo/Roo/src/utils.js",
+        "relativePath": "src/utils.js",
+        "size": 3722,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "utils/railway-env-updater.js": {
+        "name": "railway-env-updater.js",
+        "path": "/home/runner/work/Roo/Roo/utils/railway-env-updater.js",
+        "relativePath": "utils/railway-env-updater.js",
+        "size": 7432,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      }
+    },
+    "directories": {
+      "src": {
+        "name": "src",
+        "path": "/home/runner/work/Roo/Roo/src",
+        "relativePath": "src"
+      },
+      "utils": {
+        "name": "utils",
+        "path": "/home/runner/work/Roo/Roo/utils",
+        "relativePath": "utils"
+      }
+    },
+    "summary": {
+      "totalFiles": 24,
+      "totalDirectories": 2,
+      "fileTypes": {
+        "": 2,
+        ".md": 5,
+        ".sh": 1,
+        ".js": 13,
+        ".json": 2,
+        ".toml": 1
+      },
+      "largestFiles": [
+        {
+          "path": "src/index.js",
+          "size": 30917
+        },
+        {
+          "path": "package-lock.json",
+          "size": 30007
+        },
+        {
+          "path": "MANUAL_WORKFLOW.md",
+          "size": 12761
+        },
+        {
+          "path": "EXAMPLE_WALKTHROUGH.md",
+          "size": 9618
+        },
+        {
+          "path": "src/dev-tools.js",
+          "size": 9358
+        },
+        {
+          "path": "README.md",
+          "size": 8554
+        },
+        {
+          "path": "diagnostics.sh",
+          "size": 8413
+        },
+        {
+          "path": "utils/railway-env-updater.js",
+          "size": 7432
+        },
+        {
+          "path": "src/spreaker.js",
+          "size": 6722
+        },
+        {
+          "path": "roo-dev.js",
+          "size": 5940
+        }
+      ],
+      "recentFiles": [
+        {
+          "path": "roo-dev.js",
+          "modified": "2025-09-01T19:54:07.870Z"
+        },
+        {
+          "path": "src/dev-tools.js",
+          "modified": "2025-09-01T19:53:36.216Z"
+        },
+        {
+          "path": "package-lock.json",
+          "modified": "2025-09-01T19:51:33.350Z"
+        },
+        {
+          "path": "README.md",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "diagnostics.sh",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "oauth-server.js",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "package.json",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "railway.toml",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "src/google.js",
+          "modified": "2025-09-01T19:50:31.096Z"
+        },
+        {
+          "path": "src/index.js",
+          "modified": "2025-09-01T19:50:31.096Z"
+        }
+      ]
+    }
+  },
+  "packageInfo": {
+    "name": "railway-podcast-automation",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Weekly podcast generator & uploader (Google Sheets -> OpenAI -> gpt-4o-mini-tts Fable -> Spreaker) for Railway Cron Jobs.",
+    "main": "src/index.js",
+    "scripts": {
+      "start": "node src/index.js",
+      "dev": "node --watch src/index.js"
+    },
+    "dependencies": {
+      "axios": "^1.7.7",
+      "dayjs": "^1.11.13",
+      "dotenv": "^16.4.5",
+      "form-data": "^4.0.0",
+      "googleapis": "^144.0.0",
+      "node-fetch": "^3.3.2",
+      "nodemailer": "^6.9.0"
+    }
+  },
+  "documentation": [
+    {
+      "path": "DOCUMENTATION_INDEX.md",
+      "name": "DOCUMENTATION_INDEX.md",
+      "size": 4952,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "EXAMPLE_WALKTHROUGH.md",
+      "name": "EXAMPLE_WALKTHROUGH.md",
+      "size": 9618,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "MANUAL_WORKFLOW.md",
+      "name": "MANUAL_WORKFLOW.md",
+      "size": 12761,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "QUICK_REFERENCE.md",
+      "name": "QUICK_REFERENCE.md",
+      "size": 5772,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "README.md",
+      "name": "README.md",
+      "size": 8554,
+      "modified": "2025-09-01T19:50:31.096Z"
+    }
+  ]
+}

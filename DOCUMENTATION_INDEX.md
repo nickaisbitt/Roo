@@ -13,6 +13,8 @@ Welcome to the comprehensive documentation for the Roo podcast automation system
 ### Tools & Utilities
 - **[diagnostics.sh](./diagnostics.sh)** - System diagnostic and health check script
 - **[oauth-server.js](./oauth-server.js)** - OAuth helper for generating Spreaker tokens
+- **[roo-dev.js](./roo-dev.js)** - Development CLI with Unicode search and project initialization
+- **[DEV_TOOLS.md](./DEV_TOOLS.md)** - Complete guide to development tools and utilities
 
 ## 🚀 Getting Started
 
@@ -62,6 +64,12 @@ Each step can be performed manually using the documentation provided.
 1. Read: [README.md](./README.md) for overview
 2. Study: [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md) for details
 3. Try: [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md) hands-on
+
+### "I want to explore or modify the codebase"
+1. Initialize: `npm run init` - Scan project structure and generate context
+2. Search: `npm run search "pattern"` - Find code with Unicode support
+3. Review: [DEV_TOOLS.md](./DEV_TOOLS.md) - Complete development tools guide
+4. Monitor: Built-in memory management and resource cleanup tools
 
 ### "I'm getting OAuth/token errors"
 1. Check: Token section in [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md#step-4-manage-spreaker-authentication)

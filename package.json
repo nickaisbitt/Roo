@@ -6,7 +6,11 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "init": "node roo-dev.js init",
+    "search": "node roo-dev.js search",
+    "dev-help": "node roo-dev.js help",
+    "diagnostics": "./diagnostics.sh"
   },
   "dependencies": {
     "axios": "^1.7.7",
