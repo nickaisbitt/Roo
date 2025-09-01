@@ -1,6 +1,7 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
+import { sendAdminEmail } from './sendAdminEmail.js';
 
 const BASE = 'https://api.spreaker.com';
 
@@ -111,22 +112,17 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
         });
       }
       
-      // Provide helpful guidance for common OAuth errors
+      // Automated notification for invalid_grant
       if (error.response.status === 400 && error.response.data?.error === 'invalid_grant') {
         console.error('');
         console.error('🔧 ACTION REQUIRED: The Spreaker refresh token has expired or is invalid.');
-        console.error('   This typically happens when:');
-        console.error('   1. The token has expired (refresh tokens do expire after some time)');
-        console.error('   2. The token was already used and burned in a previous failed run');
-        console.error('   3. The token was manually regenerated in Spreaker app settings');
-        console.error('');
-        console.error('   To fix this issue:');
-        console.error('   1. Go to your Spreaker app settings and regenerate a new refresh token');
-        console.error('   2. Update the SPREAKER_REFRESH_TOKEN environment variable in Railway');
-        console.error('   3. Redeploy or restart the service');
-        console.error('');
-        console.error('   Current token (last 8 chars):', refresh_token ? refresh_token.slice(-8) : 'undefined');
-        console.error('');
+        // Send email notification to admin
+        await sendAdminEmail({
+          to: 'nick@tryconvenient.com',
+          subject: 'Spreaker Refresh Token Expired',
+          text: `The Spreaker refresh token has expired or is invalid.\n\nPlease re-authenticate using the following link: https://yourdomain.com/spreaker/re-auth\n\nCurrent token (last 8 chars): ${refresh_token ? refresh_token.slice(-8) : 'undefined'}\n\nThis typically happens when:\n1. The token has expired (refresh tokens do expire after some time)\n2. The token was already used and burned in a previous failed run\n3. The token was manually regenerated in Spreaker app settings.`
+        });
+        console.error('Automated email sent to admin for re-authentication.');
       }
     }
     throw new Error(`OAuth token refresh failed: ${error.message}`);
