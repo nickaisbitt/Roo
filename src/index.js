@@ -620,6 +620,22 @@ async function main(){
   logOAuthStats('run completion');
 }
 
+// Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+  console.error('Stack trace:', reason?.stack || 'No stack trace available');
+  logOAuthStats('unhandled rejection');
+  // Don't exit immediately, let the main error handler decide
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack trace:', error.stack);
+  logOAuthStats('uncaught exception');
+  process.exit(1); // Exit on uncaught exception to prevent undefined state
+});
+
 main().catch(err=>{ 
   console.error('Fatal error:', err);
   // Log OAuth stats even on fatal errors to help with debugging
