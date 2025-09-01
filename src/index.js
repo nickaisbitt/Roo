@@ -129,7 +129,17 @@ async function main(){
   }
   
   let accessToken=null;
-  if(!DRY){ accessToken=await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); }
+  if(!DRY){ 
+    try {
+      const tokenResult = await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); 
+      accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
+    } catch (error) {
+      console.error('❌ OAuth token refresh failed. Exiting gracefully to prevent restart loop.');
+      console.error('   Please check your SPREAKER_REFRESH_TOKEN environment variable and regenerate if needed.');
+      console.error('   Service will not auto-restart to avoid burning through tokens.');
+      return; // Exit gracefully without crashing
+    }
+  }
   for(const row of toProcess){
     // Use cached date from filtering phase, or re-parse if needed
     let publishDate = row._parsedDate;
