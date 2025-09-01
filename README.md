@@ -58,3 +58,35 @@ After deploying this fix:
 4. Railway environment variables get updated for future runs
 
 **The token burning issue is now completely resolved!**
+
+## Troubleshooting
+
+### "Invalid refresh token" or "invalid_grant" Error
+
+If you see errors like:
+```
+Failed to refresh Spreaker access token: Request failed with status code 400
+OAuth Error Response: { error: 'invalid_grant', error_description: 'Invalid refresh token' }
+```
+
+This means your stored refresh token has expired. Here's how to fix it:
+
+#### Option 1: Use the OAuth Helper (Recommended)
+1. Deploy the `oauth-server.js` temporarily to Railway
+2. Visit your app URL and click "Connect Spreaker"
+3. Complete the OAuth flow to get a fresh refresh token
+4. Copy the new `SPREAKER_REFRESH_TOKEN` value to your Railway environment variables
+5. Redeploy your main service
+
+#### Option 2: Manual Regeneration
+1. Go to your Spreaker app settings page
+2. Find the OAuth/API section and regenerate your refresh token
+3. Update the `SPREAKER_REFRESH_TOKEN` environment variable in Railway
+4. Redeploy the service
+
+#### Why This Happens
+- Spreaker refresh tokens can expire after extended periods of inactivity
+- Failed deployment attempts can sometimes burn tokens
+- Manual regeneration in Spreaker app settings invalidates old tokens
+
+The app now includes better detection and clearer error messages for this scenario.
