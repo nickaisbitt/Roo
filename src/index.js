@@ -83,6 +83,17 @@ async function safeRefreshAccessToken() {
   } catch (error) {
     console.error('❌ OAuth token refresh failed:', error.message);
     console.error('   Current refresh token (last 8 chars):', currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined');
+    
+    // Provide additional guidance for invalid_grant errors
+    if (error.message.includes('invalid_grant') || error.message.includes('Invalid refresh token')) {
+      console.error('');
+      console.error('💡 This appears to be an expired or invalid refresh token issue.');
+      console.error('   The token stored in Railway environment variables needs to be regenerated.');
+      console.error('   Use the oauth-server.js helper to get a new token, or manually regenerate');
+      console.error('   from your Spreaker app settings.');
+      console.error('');
+    }
+    
     throw error;
   }
 }

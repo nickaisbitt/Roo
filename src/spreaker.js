@@ -4,11 +4,45 @@ import fs from 'fs';
 
 const BASE = 'https://api.spreaker.com';
 
+/**
+ * Basic validation for Spreaker refresh token format
+ * This catches obviously invalid tokens before making API calls
+ */
+function validateRefreshToken(token) {
+  if (!token) {
+    return { valid: false, reason: 'Token is empty or undefined' };
+  }
+  
+  if (typeof token !== 'string') {
+    return { valid: false, reason: 'Token must be a string' };
+  }
+  
+  if (token.length < 20) {
+    return { valid: false, reason: 'Token appears too short (less than 20 characters)' };
+  }
+  
+  // Check for common placeholder values that indicate the token hasn't been set properly
+  const placeholders = ['your_token_here', 'placeholder', 'change_me', 'example'];
+  if (placeholders.some(placeholder => token.toLowerCase().includes(placeholder))) {
+    return { valid: false, reason: 'Token appears to be a placeholder value' };
+  }
+  
+  return { valid: true };
+}
+
 export async function refreshAccessToken({ client_id, client_secret, refresh_token }) {
   const url = `${BASE}/oauth2/token`;
   
   console.log('Refreshing Spreaker access token...');
   console.log(`Using refresh token (last 8 chars): ${refresh_token ? refresh_token.slice(-8) : 'undefined'}`);
+  
+  // Validate the refresh token before making the API call
+  const validation = validateRefreshToken(refresh_token);
+  if (!validation.valid) {
+    console.error('❌ Invalid refresh token detected before API call:', validation.reason);
+    console.error('🔧 Please check your SPREAKER_REFRESH_TOKEN environment variable');
+    throw new Error(`Invalid refresh token: ${validation.reason}`);
+  }
   
   // Create a fresh FormData instance for each request
   const form = new FormData();
@@ -61,8 +95,17 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
       if (error.response.status === 400 && error.response.data?.error === 'invalid_grant') {
         console.error('');
         console.error('🔧 ACTION REQUIRED: The Spreaker refresh token has expired or is invalid.');
-        console.error('   Please regenerate a new refresh token from your Spreaker app settings');
-        console.error('   and update the SPREAKER_REFRESH_TOKEN environment variable.');
+        console.error('   This typically happens when:');
+        console.error('   1. The token has expired (refresh tokens do expire after some time)');
+        console.error('   2. The token was already used and burned in a previous failed run');
+        console.error('   3. The token was manually regenerated in Spreaker app settings');
+        console.error('');
+        console.error('   To fix this issue:');
+        console.error('   1. Go to your Spreaker app settings and regenerate a new refresh token');
+        console.error('   2. Update the SPREAKER_REFRESH_TOKEN environment variable in Railway');
+        console.error('   3. Redeploy or restart the service');
+        console.error('');
+        console.error('   Current token (last 8 chars):', refresh_token ? refresh_token.slice(-8) : 'undefined');
         console.error('');
       }
     }
