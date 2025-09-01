@@ -8,9 +8,19 @@ This Cron job runs once per week on Railway and will:
 
 ## Spreaker Token Management Fix
 
-**PROBLEM SOLVED**: The app no longer burns through Spreaker refresh tokens on multiple uses within the same process execution.
+**PROBLEM RESOLVED**: The app now provides comprehensive OAuth token management that eliminates continual 400 "invalid_grant" errors.
 
-### What Was Fixed
+### Latest Improvements (v2.0)
+
+**Enhanced with proactive token management and retry logic to completely eliminate OAuth errors:**
+
+1. ✅ **Proactive Token Refresh**: Tokens are refreshed before expiration (5-minute buffer) instead of waiting for failures
+2. ✅ **Retry Logic**: 3 attempts with exponential backoff (1s, 2s, 4s) + jitter for transient failures  
+3. ✅ **Concurrency Control**: Prevents multiple simultaneous refresh attempts that could burn tokens
+4. ✅ **Token Expiration Tracking**: Full lifecycle management with expiration monitoring
+5. ✅ **Enhanced Diagnostics**: Detailed error analysis and rate limit monitoring for debugging
+
+### What Was Originally Fixed (v1.0)
 
 The previous implementation had a critical issue where Spreaker's one-time-use refresh tokens would get "burned" on first use:
 
@@ -20,9 +30,21 @@ The previous implementation had a critical issue where Spreaker's one-time-use r
 4. ❌ Current process continued using the old (now invalid) token
 5. ❌ Subsequent calls failed with `invalid_grant` error
 
-### How It's Fixed
+### How Token Management Works Now (v2.0)
 
-The new implementation maintains refresh token state throughout the process execution:
+The comprehensive solution includes multiple layers of protection:
+
+1. ✅ **Startup Initialization**: `initializeTokens()` gets a valid token before processing begins
+2. ✅ **Proactive Refresh**: `safeRefreshAccessToken()` refreshes tokens before they expire  
+3. ✅ **Intelligent Upload**: `safeUploadEpisode()` checks token health before each upload
+4. ✅ **Process State**: `currentRefreshToken` and `currentAccessToken` maintain current valid tokens
+5. ✅ **Graceful Retry**: Failed refreshes retry with exponential backoff for transient issues
+6. ✅ **Railway Sync**: Updates environment variables for future deployments (async)
+7. ✅ **Monitoring**: Token status logging for visibility and debugging
+
+### Original Implementation (v1.0)
+
+The initial fix addressed token burning within process execution:
 
 1. ✅ **New behavior**: `currentRefreshToken` variable tracks the active token
 2. ✅ First API call succeeds and returns a new refresh token
@@ -63,13 +85,15 @@ After deploying this fix:
 
 ### "Invalid refresh token" or "invalid_grant" Error
 
-If you see errors like:
+**Note**: With the v2.0 improvements, these errors should now be extremely rare due to proactive token management and retry logic. 
+
+If you still see errors like:
 ```
 Failed to refresh Spreaker access token: Request failed with status code 400
 OAuth Error Response: { error: 'invalid_grant', error_description: 'Invalid refresh token' }
 ```
 
-This means your stored refresh token has expired. Here's how to fix it:
+This typically indicates the stored refresh token is completely expired or invalid and requires manual regeneration:
 
 #### Option 1: Use the OAuth Helper (Recommended)
 1. Deploy the `oauth-server.js` temporarily to Railway
@@ -90,3 +114,36 @@ This means your stored refresh token has expired. Here's how to fix it:
 - Manual regeneration in Spreaker app settings invalidates old tokens
 
 The app now includes better detection and clearer error messages for this scenario.
+
+## Token Health Monitoring
+
+### Enhanced Logging
+
+The v2.0 improvements include comprehensive logging for token lifecycle monitoring:
+
+- **Token Status**: Expiration time, refresh progress, current token health
+- **Proactive Refresh**: Logs when tokens are refreshed before expiration
+- **Retry Attempts**: Detailed retry attempts with backoff timing
+- **Error Analysis**: Enhanced error details including rate limit headers and timestamps
+- **Railway Sync**: Status of environment variable updates for future runs
+
+### Example Log Output
+
+```
+🚀 Initializing Spreaker token management...
+🔑 Using refresh token (last 8 chars): abc12345
+🔄 Token refresh attempt 1/3
+✅ Access token refreshed successfully (expires in 3600 seconds)
+🕒 Token expires at: 2024-01-15T14:30:00.000Z
+📊 Token status: {"hasRefreshToken":true,"hasAccessToken":true,"isExpired":false,"expiresAt":"2024-01-15T14:30:00.000Z","refreshInProgress":false}
+✅ Token management initialized successfully
+```
+
+### Monitoring Environment Variables
+
+For automatic token updates, ensure these are configured:
+- `RAILWAY_API_TOKEN` - Railway API token
+- `RAILWAY_PROJECT_ID` - Railway project ID  
+- `RAILWAY_ENVIRONMENT_ID` - Railway environment ID (defaults to 'production')
+
+If these are missing, token updates will be logged for manual application.
