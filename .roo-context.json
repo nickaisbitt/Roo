@@ -1,0 +1,400 @@
+{
+  "timestamp": "2025-09-01T20:03:41.339Z",
+  "platform": {
+    "os": "linux",
+    "arch": "x64",
+    "node": "v20.19.4",
+    "cwd": "/home/runner/work/Roo/Roo"
+  },
+  "structure": {
+    "root": "/home/runner/work/Roo/Roo",
+    "files": {
+      ".gitignore": {
+        "name": ".gitignore",
+        "path": "/home/runner/work/Roo/Roo/.gitignore",
+        "relativePath": ".gitignore",
+        "size": 66,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ""
+      },
+      ".roo-context.json": {
+        "name": ".roo-context.json",
+        "path": "/home/runner/work/Roo/Roo/.roo-context.json",
+        "relativePath": ".roo-context.json",
+        "size": 10596,
+        "modified": "2025-09-01T19:54:24.304Z",
+        "extension": ".json"
+      },
+      "DEV_TOOLS.md": {
+        "name": "DEV_TOOLS.md",
+        "path": "/home/runner/work/Roo/Roo/DEV_TOOLS.md",
+        "relativePath": "DEV_TOOLS.md",
+        "size": 7462,
+        "modified": "2025-09-01T20:01:34.002Z",
+        "extension": ".md"
+      },
+      "DOCUMENTATION_INDEX.md": {
+        "name": "DOCUMENTATION_INDEX.md",
+        "path": "/home/runner/work/Roo/Roo/DOCUMENTATION_INDEX.md",
+        "relativePath": "DOCUMENTATION_INDEX.md",
+        "size": 5477,
+        "modified": "2025-09-01T20:02:08.949Z",
+        "extension": ".md"
+      },
+      "Dockerfile": {
+        "name": "Dockerfile",
+        "path": "/home/runner/work/Roo/Roo/Dockerfile",
+        "relativePath": "Dockerfile",
+        "size": 276,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ""
+      },
+      "EXAMPLE_WALKTHROUGH.md": {
+        "name": "EXAMPLE_WALKTHROUGH.md",
+        "path": "/home/runner/work/Roo/Roo/EXAMPLE_WALKTHROUGH.md",
+        "relativePath": "EXAMPLE_WALKTHROUGH.md",
+        "size": 9618,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "MANUAL_WORKFLOW.md": {
+        "name": "MANUAL_WORKFLOW.md",
+        "path": "/home/runner/work/Roo/Roo/MANUAL_WORKFLOW.md",
+        "relativePath": "MANUAL_WORKFLOW.md",
+        "size": 12761,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "QUICK_REFERENCE.md": {
+        "name": "QUICK_REFERENCE.md",
+        "path": "/home/runner/work/Roo/Roo/QUICK_REFERENCE.md",
+        "relativePath": "QUICK_REFERENCE.md",
+        "size": 5772,
+        "modified": "2025-09-01T19:50:31.095Z",
+        "extension": ".md"
+      },
+      "README.md": {
+        "name": "README.md",
+        "path": "/home/runner/work/Roo/Roo/README.md",
+        "relativePath": "README.md",
+        "size": 8554,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".md"
+      },
+      "diagnostics.sh": {
+        "name": "diagnostics.sh",
+        "path": "/home/runner/work/Roo/Roo/diagnostics.sh",
+        "relativePath": "diagnostics.sh",
+        "size": 9328,
+        "modified": "2025-09-01T19:55:54.089Z",
+        "extension": ".sh"
+      },
+      "oauth-server.js": {
+        "name": "oauth-server.js",
+        "path": "/home/runner/work/Roo/Roo/oauth-server.js",
+        "relativePath": "oauth-server.js",
+        "size": 4390,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "package-lock.json": {
+        "name": "package-lock.json",
+        "path": "/home/runner/work/Roo/Roo/package-lock.json",
+        "relativePath": "package-lock.json",
+        "size": 30007,
+        "modified": "2025-09-01T19:51:33.350Z",
+        "extension": ".json"
+      },
+      "package.json": {
+        "name": "package.json",
+        "path": "/home/runner/work/Roo/Roo/package.json",
+        "relativePath": "package.json",
+        "size": 710,
+        "modified": "2025-09-01T19:56:11.004Z",
+        "extension": ".json"
+      },
+      "railway.toml": {
+        "name": "railway.toml",
+        "path": "/home/runner/work/Roo/Roo/railway.toml",
+        "relativePath": "railway.toml",
+        "size": 36,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".toml"
+      },
+      "roo-dev.js": {
+        "name": "roo-dev.js",
+        "path": "/home/runner/work/Roo/Roo/roo-dev.js",
+        "relativePath": "roo-dev.js",
+        "size": 8406,
+        "modified": "2025-09-01T20:02:54.135Z",
+        "extension": ".js"
+      },
+      "src/dev-tools.js": {
+        "name": "dev-tools.js",
+        "path": "/home/runner/work/Roo/Roo/src/dev-tools.js",
+        "relativePath": "src/dev-tools.js",
+        "size": 13630,
+        "modified": "2025-09-01T19:57:50.407Z",
+        "extension": ".js"
+      },
+      "src/google.js": {
+        "name": "google.js",
+        "path": "/home/runner/work/Roo/Roo/src/google.js",
+        "relativePath": "src/google.js",
+        "size": 2159,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/index.js": {
+        "name": "index.js",
+        "path": "/home/runner/work/Roo/Roo/src/index.js",
+        "relativePath": "src/index.js",
+        "size": 30917,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/memory-manager.js": {
+        "name": "memory-manager.js",
+        "path": "/home/runner/work/Roo/Roo/src/memory-manager.js",
+        "relativePath": "src/memory-manager.js",
+        "size": 11053,
+        "modified": "2025-09-01T19:57:05.893Z",
+        "extension": ".js"
+      },
+      "src/openai-text.js": {
+        "name": "openai-text.js",
+        "path": "/home/runner/work/Roo/Roo/src/openai-text.js",
+        "relativePath": "src/openai-text.js",
+        "size": 649,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/prompts.js": {
+        "name": "prompts.js",
+        "path": "/home/runner/work/Roo/Roo/src/prompts.js",
+        "relativePath": "src/prompts.js",
+        "size": 3454,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/sendAdminEmail.js": {
+        "name": "sendAdminEmail.js",
+        "path": "/home/runner/work/Roo/Roo/src/sendAdminEmail.js",
+        "relativePath": "src/sendAdminEmail.js",
+        "size": 1066,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/spreaker-re-auth.js": {
+        "name": "spreaker-re-auth.js",
+        "path": "/home/runner/work/Roo/Roo/src/spreaker-re-auth.js",
+        "relativePath": "src/spreaker-re-auth.js",
+        "size": 440,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/spreaker.js": {
+        "name": "spreaker.js",
+        "path": "/home/runner/work/Roo/Roo/src/spreaker.js",
+        "relativePath": "src/spreaker.js",
+        "size": 6722,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/tts.js": {
+        "name": "tts.js",
+        "path": "/home/runner/work/Roo/Roo/src/tts.js",
+        "relativePath": "src/tts.js",
+        "size": 1461,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "src/utils.js": {
+        "name": "utils.js",
+        "path": "/home/runner/work/Roo/Roo/src/utils.js",
+        "relativePath": "src/utils.js",
+        "size": 3722,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      },
+      "utils/railway-env-updater.js": {
+        "name": "railway-env-updater.js",
+        "path": "/home/runner/work/Roo/Roo/utils/railway-env-updater.js",
+        "relativePath": "utils/railway-env-updater.js",
+        "size": 7432,
+        "modified": "2025-09-01T19:50:31.096Z",
+        "extension": ".js"
+      }
+    },
+    "directories": {
+      "src": {
+        "name": "src",
+        "path": "/home/runner/work/Roo/Roo/src",
+        "relativePath": "src"
+      },
+      "utils": {
+        "name": "utils",
+        "path": "/home/runner/work/Roo/Roo/utils",
+        "relativePath": "utils"
+      }
+    },
+    "summary": {
+      "totalFiles": 27,
+      "totalDirectories": 2,
+      "fileTypes": {
+        "": 2,
+        ".json": 3,
+        ".md": 6,
+        ".sh": 1,
+        ".js": 14,
+        ".toml": 1
+      },
+      "largestFiles": [
+        {
+          "path": "src/index.js",
+          "size": 30917
+        },
+        {
+          "path": "package-lock.json",
+          "size": 30007
+        },
+        {
+          "path": "src/dev-tools.js",
+          "size": 13630
+        },
+        {
+          "path": "MANUAL_WORKFLOW.md",
+          "size": 12761
+        },
+        {
+          "path": "src/memory-manager.js",
+          "size": 11053
+        },
+        {
+          "path": ".roo-context.json",
+          "size": 10596
+        },
+        {
+          "path": "EXAMPLE_WALKTHROUGH.md",
+          "size": 9618
+        },
+        {
+          "path": "diagnostics.sh",
+          "size": 9328
+        },
+        {
+          "path": "README.md",
+          "size": 8554
+        },
+        {
+          "path": "roo-dev.js",
+          "size": 8406
+        }
+      ],
+      "recentFiles": [
+        {
+          "path": "roo-dev.js",
+          "modified": "2025-09-01T20:02:54.135Z"
+        },
+        {
+          "path": "DOCUMENTATION_INDEX.md",
+          "modified": "2025-09-01T20:02:08.949Z"
+        },
+        {
+          "path": "DEV_TOOLS.md",
+          "modified": "2025-09-01T20:01:34.002Z"
+        },
+        {
+          "path": "src/dev-tools.js",
+          "modified": "2025-09-01T19:57:50.407Z"
+        },
+        {
+          "path": "src/memory-manager.js",
+          "modified": "2025-09-01T19:57:05.893Z"
+        },
+        {
+          "path": "package.json",
+          "modified": "2025-09-01T19:56:11.004Z"
+        },
+        {
+          "path": "diagnostics.sh",
+          "modified": "2025-09-01T19:55:54.089Z"
+        },
+        {
+          "path": ".roo-context.json",
+          "modified": "2025-09-01T19:54:24.304Z"
+        },
+        {
+          "path": "package-lock.json",
+          "modified": "2025-09-01T19:51:33.350Z"
+        },
+        {
+          "path": "README.md",
+          "modified": "2025-09-01T19:50:31.096Z"
+        }
+      ]
+    }
+  },
+  "packageInfo": {
+    "name": "railway-podcast-automation",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Weekly podcast generator & uploader (Google Sheets -> OpenAI -> gpt-4o-mini-tts Fable -> Spreaker) for Railway Cron Jobs.",
+    "main": "src/index.js",
+    "scripts": {
+      "start": "node src/index.js",
+      "dev": "node --watch src/index.js",
+      "init": "node roo-dev.js init",
+      "search": "node roo-dev.js search",
+      "dev-help": "node roo-dev.js help",
+      "diagnostics": "./diagnostics.sh"
+    },
+    "dependencies": {
+      "axios": "^1.7.7",
+      "dayjs": "^1.11.13",
+      "dotenv": "^16.4.5",
+      "form-data": "^4.0.0",
+      "googleapis": "^144.0.0",
+      "node-fetch": "^3.3.2",
+      "nodemailer": "^6.9.0"
+    }
+  },
+  "documentation": [
+    {
+      "path": "DEV_TOOLS.md",
+      "name": "DEV_TOOLS.md",
+      "size": 7462,
+      "modified": "2025-09-01T20:01:34.002Z"
+    },
+    {
+      "path": "DOCUMENTATION_INDEX.md",
+      "name": "DOCUMENTATION_INDEX.md",
+      "size": 5477,
+      "modified": "2025-09-01T20:02:08.949Z"
+    },
+    {
+      "path": "EXAMPLE_WALKTHROUGH.md",
+      "name": "EXAMPLE_WALKTHROUGH.md",
+      "size": 9618,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "MANUAL_WORKFLOW.md",
+      "name": "MANUAL_WORKFLOW.md",
+      "size": 12761,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "QUICK_REFERENCE.md",
+      "name": "QUICK_REFERENCE.md",
+      "size": 5772,
+      "modified": "2025-09-01T19:50:31.095Z"
+    },
+    {
+      "path": "README.md",
+      "name": "README.md",
+      "size": 8554,
+      "modified": "2025-09-01T19:50:31.096Z"
+    }
+  ]
+}

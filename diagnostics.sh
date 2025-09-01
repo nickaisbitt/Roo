@@ -9,6 +9,32 @@ echo "🔍 Roo Podcast Automation - System Diagnostics"
 echo "=============================================="
 echo
 
+# Check if development tools are available
+echo "🛠️  Development Tools Status"
+echo "----------------------------"
+
+if [ -f "roo-dev.js" ]; then
+    echo -e "✅ ${GREEN}roo-dev.js${NC} - Development CLI available"
+    echo "   Run: node roo-dev.js help"
+    echo "   Features: Project initialization, Unicode file search, cross-platform support"
+else
+    echo -e "❌ ${RED}roo-dev.js${NC} - Development CLI not found"
+fi
+
+if [ -f "src/dev-tools.js" ]; then
+    echo -e "✅ ${GREEN}src/dev-tools.js${NC} - Development utilities available"
+else
+    echo -e "❌ ${RED}src/dev-tools.js${NC} - Development utilities not found"
+fi
+
+if [ -f ".roo-context.json" ]; then
+    echo -e "✅ ${GREEN}.roo-context.json${NC} - Project context available (run: node roo-dev.js init to update)"
+else
+    echo -e "ℹ️  ${YELLOW}.roo-context.json${NC} - Project context not generated (run: node roo-dev.js init)"
+fi
+
+echo
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
