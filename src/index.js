@@ -410,22 +410,42 @@ async function generateEpisodePackage({episodeType,input}){
 /**
  * Initialize token management - ensures we have a valid access token at startup
  * This proactively gets a token to avoid delays during episode processing
+ * Returns null if token initialization fails to allow graceful degradation
  */
 async function initializeTokens() {
   console.log('🚀 Initializing Spreaker token management...');
   
   if (!currentRefreshToken) {
-    throw new Error('SPREAKER_REFRESH_TOKEN environment variable is not set.');
+    const error = new Error('SPREAKER_REFRESH_TOKEN environment variable is not set.');
+    console.error('❌ Token initialization failed:', error.message);
+    return { success: false, error: error.message };
   }
   
   console.log(`🔑 Using refresh token (last 8 chars): ${currentRefreshToken.slice(-8)}`);
   
-  // Get initial access token
-  const accessToken = await safeRefreshAccessToken();
-  console.log('✅ Token management initialized successfully');
-  console.log('📊 Token status:', getTokenStatus());
-  
-  return accessToken;
+  try {
+    // Get initial access token
+    const accessToken = await safeRefreshAccessToken();
+    console.log('✅ Token management initialized successfully');
+    console.log('📊 Token status:', getTokenStatus());
+    
+    return { success: true, accessToken };
+  } catch (error) {
+    console.error('❌ Token initialization failed:', error.message);
+    console.error('🔧 The application will start but episode processing will be skipped.');
+    console.error('📧 Admin notification should have been sent if email is configured.');
+    
+    // Log the specific error type for debugging
+    if (error.message.includes('invalid_grant')) {
+      console.error('🚨 This appears to be an invalid/expired refresh token issue.');
+      console.error('   Manual token regeneration is required to resume episode processing.');
+    } else {
+      console.error('🌐 This may be a temporary connectivity or API issue.');
+      console.error('   The application will continue running and may recover on the next attempt.');
+    }
+    
+    return { success: false, error: error.message };
+  }
 }
 
 async function main(){
@@ -435,7 +455,21 @@ async function main(){
   if(!SHOW_ID) throw new Error('Missing SPREAKER_SHOW_ID.');
   
   // Initialize token management first
-  await initializeTokens();
+  const tokenResult = await initializeTokens();
+  
+  // If token initialization fails, we can still start the application but skip episode processing
+  if (!tokenResult.success) {
+    console.error('⚠️ Episode processing will be skipped due to token initialization failure.');
+    console.error('🔧 Please resolve the token issue and restart the application.');
+    console.error('💡 The application started successfully and will exit gracefully.');
+    
+    // Log final OAuth statistics for this failed run
+    logOAuthStats('startup - token initialization failed');
+    
+    // Exit gracefully instead of crashing
+    console.log('👋 Application exiting gracefully due to token issues.');
+    process.exit(0); // Use exit code 0 to indicate controlled shutdown
+  }
   
   console.log(`Reading Google Sheet: ${SPREADSHEET_ID}, tab: ${TAB_NAME}`);
   const { headers, rows } = await readTable({ spreadsheetId: SPREADSHEET_ID, tabName: TAB_NAME });
