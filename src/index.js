@@ -21,6 +21,103 @@ const DRY=coerceBoolean(process.env.DRY_RUN||'false');
 const TZ=process.env.EPISODE_TIMEZONE||'UTC';
 const PUBLISH_TIME=process.env.SPREAKER_PUBLISH_TIME_UTC||'08:00:00';
 
+// Token state management - maintains current refresh token during process execution
+let currentRefreshToken = process.env.SPREAKER_REFRESH_TOKEN;
+
+/**
+ * Safely refresh Spreaker access token and update current refresh token state
+ * This prevents the token burning issue by maintaining token state within the process
+ */
+async function safeRefreshAccessToken() {
+  console.log('🔑 Refreshing Spreaker access token using current refresh token...');
+  
+  if (!currentRefreshToken) {
+    throw new Error('No refresh token available. Please check SPREAKER_REFRESH_TOKEN environment variable.');
+  }
+  
+  try {
+    const tokenResult = await refreshAccessToken({ 
+      client_id: process.env.SPREAKER_CLIENT_ID, 
+      client_secret: process.env.SPREAKER_CLIENT_SECRET, 
+      refresh_token: currentRefreshToken 
+    });
+    
+    const accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
+    
+    // Critical: If Spreaker provided a new refresh token, update our current state immediately
+    if (tokenResult.refresh_token && tokenResult.refresh_token !== currentRefreshToken) {
+      console.log('🔄 New refresh token received from Spreaker. Updating current token state...');
+      
+      // Update the current process state FIRST
+      const oldToken = currentRefreshToken;
+      currentRefreshToken = tokenResult.refresh_token;
+      
+      console.log(`🔑 Token updated in process: ${oldToken.slice(-8)} -> ${currentRefreshToken.slice(-8)}`);
+      
+      // Then attempt to update Railway environment variable for future runs
+      const railwayApiToken = process.env.RAILWAY_API_TOKEN;
+      const projectId = process.env.RAILWAY_PROJECT_ID;
+      const environmentId = process.env.RAILWAY_ENVIRONMENT_ID || 'production';
+      
+      if (railwayApiToken && projectId) {
+        try {
+          const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
+          await updateSpeakerRefreshToken({
+            apiToken: railwayApiToken,
+            projectId: projectId,
+            environmentId: environmentId,
+            refreshToken: currentRefreshToken
+          });
+          console.log('✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment');
+        } catch (updateError) {
+          console.error('⚠️  Failed to automatically update Railway environment variable:', updateError.message);
+          console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', currentRefreshToken);
+        }
+      } else {
+        console.log('⚠️  Cannot auto-update Railway environment variable (missing RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID)');
+        console.log('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', currentRefreshToken);
+      }
+    }
+    
+    return accessToken;
+  } catch (error) {
+    console.error('❌ OAuth token refresh failed:', error.message);
+    console.error('   Current refresh token (last 8 chars):', currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined');
+    throw error;
+  }
+}
+
+/**
+ * Upload episode with automatic token refresh on auth failure
+ * This handles cases where access token expires during long-running processes
+ */
+async function safeUploadEpisode(currentAccessToken, uploadParams) {
+  try {
+    // First attempt with current access token
+    return await uploadEpisode({ accessToken: currentAccessToken, ...uploadParams });
+  } catch (error) {
+    // Check if this is an authentication error that might be resolved with token refresh
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.log('🔄 Upload failed with auth error, attempting to refresh access token and retry...');
+      
+      try {
+        // Refresh the access token
+        const newAccessToken = await safeRefreshAccessToken();
+        
+        // Retry the upload with fresh token
+        console.log('🔁 Retrying upload with refreshed access token...');
+        return await uploadEpisode({ accessToken: newAccessToken, ...uploadParams });
+      } catch (refreshError) {
+        console.error('❌ Failed to refresh token for retry:', refreshError.message);
+        throw error; // Throw original upload error
+      }
+    } else {
+      // Not an auth error, throw original error
+      throw error;
+    }
+  }
+}
+
 function pickEpisodeType(v){const s=(v||'').toLowerCase(); if(s.includes('fri')) return 'friday'; return s.includes('main')?'main':'main';}
 
 async function generateEpisodePackage({episodeType,input}){
@@ -131,38 +228,7 @@ async function main(){
   let accessToken=null;
   if(!DRY){ 
     try {
-      const tokenResult = await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); 
-      accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
-      
-      // If Spreaker provided a new refresh token, automatically update Railway environment variable
-      if (tokenResult.refresh_token && tokenResult.refresh_token !== process.env.SPREAKER_REFRESH_TOKEN) {
-        console.log('🔄 New refresh token received from Spreaker. Attempting to update Railway environment variable...');
-        
-        // Check if we have the required Railway API credentials
-        const railwayApiToken = process.env.RAILWAY_API_TOKEN;
-        const projectId = process.env.RAILWAY_PROJECT_ID;
-        const environmentId = process.env.RAILWAY_ENVIRONMENT_ID || 'production';
-        
-        if (railwayApiToken && projectId) {
-          try {
-            // Dynamic import to avoid loading Railway utility unless needed
-            const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
-            await updateSpeakerRefreshToken({
-              apiToken: railwayApiToken,
-              projectId: projectId,
-              environmentId: environmentId,
-              refreshToken: tokenResult.refresh_token
-            });
-            console.log('✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment');
-          } catch (updateError) {
-            console.error('⚠️  Failed to automatically update Railway environment variable:', updateError.message);
-            console.error('   Please manually update SPREAKER_REFRESH_TOKEN to:', tokenResult.refresh_token);
-          }
-        } else {
-          console.log('⚠️  Cannot auto-update Railway environment variable (missing RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID)');
-          console.log('   Please manually update SPREAKER_REFRESH_TOKEN to:', tokenResult.refresh_token);
-        }
-      }
+      accessToken = await safeRefreshAccessToken();
     } catch (error) {
       console.error('❌ OAuth token refresh failed. Exiting gracefully to prevent restart loop.');
       console.error('   Please check your SPREAKER_REFRESH_TOKEN environment variable and regenerate if needed.');
@@ -190,7 +256,14 @@ async function main(){
     if(!DRY){
       console.log(`Attempting to upload episode for row ${row._rowIndex}...`);
       try {
-        uploaded=await uploadEpisode({ accessToken, showId:SHOW_ID, filePath:audioPath, title:pkg.title, description:pkg.htmlDesc||pkg.description, tags:pkg.tags, autoPublishedAtUtc:autoUtc });
+        uploaded = await safeUploadEpisode(accessToken, {
+          showId: SHOW_ID,
+          filePath: audioPath,
+          title: pkg.title,
+          description: pkg.htmlDesc || pkg.description,
+          tags: pkg.tags,
+          autoPublishedAtUtc: autoUtc
+        });
         console.log(`Successfully uploaded episode for row ${row._rowIndex}: ${uploaded.episodeId}`);
       } catch (error) {
         console.error(`Error uploading episode for row ${row._rowIndex}:`, error.message);

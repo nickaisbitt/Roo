@@ -8,6 +8,7 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
   const url = `${BASE}/oauth2/token`;
   
   console.log('Refreshing Spreaker access token...');
+  console.log(`Using refresh token (last 8 chars): ${refresh_token ? refresh_token.slice(-8) : 'undefined'}`);
   
   // Create a fresh FormData instance for each request
   const form = new FormData();
@@ -30,6 +31,7 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     });
     
     console.log('Successfully refreshed Spreaker access token');
+    console.log(`Access token received (expires in ${res.data.expires_in || 'unknown'} seconds)`);
     
     // Return both access token and any new refresh token provided
     const result = { 
@@ -39,7 +41,10 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     // If Spreaker provides a new refresh token, include it in the response
     if (res.data.refresh_token) {
       result.refresh_token = res.data.refresh_token;
-      console.log('⚠️  New refresh token received - update SPREAKER_REFRESH_TOKEN environment variable to:', res.data.refresh_token);
+      console.log(`⚠️  New refresh token received: ${res.data.refresh_token.slice(-8)}`);
+      console.log('⚠️  Update SPREAKER_REFRESH_TOKEN environment variable to:', res.data.refresh_token);
+    } else {
+      console.log('✅ No new refresh token provided - current token remains valid');
     }
     
     return result;
