@@ -30,6 +30,8 @@ function validateRefreshToken(token) {
   return { valid: true };
 }
 
+export { validateRefreshToken };
+
 export async function refreshAccessToken({ client_id, client_secret, refresh_token }) {
   const url = `${BASE}/oauth2/token`;
   
