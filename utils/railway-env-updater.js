@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 /**
  * Railway Environment Variable Updater
@@ -234,7 +234,7 @@ async function getRailwayProjectInfo(apiToken) {
   }
 }
 
-module.exports = {
+export {
   updateRailwayEnvVar,
   updateSpeakerRefreshToken,
   getRailwayProjectInfo

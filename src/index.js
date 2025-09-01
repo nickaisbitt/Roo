@@ -133,6 +133,36 @@ async function main(){
     try {
       const tokenResult = await refreshAccessToken({ client_id:process.env.SPREAKER_CLIENT_ID, client_secret:process.env.SPREAKER_CLIENT_SECRET, refresh_token:process.env.SPREAKER_REFRESH_TOKEN }); 
       accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
+      
+      // If Spreaker provided a new refresh token, automatically update Railway environment variable
+      if (tokenResult.refresh_token && tokenResult.refresh_token !== process.env.SPREAKER_REFRESH_TOKEN) {
+        console.log('🔄 New refresh token received from Spreaker. Attempting to update Railway environment variable...');
+        
+        // Check if we have the required Railway API credentials
+        const railwayApiToken = process.env.RAILWAY_API_TOKEN;
+        const projectId = process.env.RAILWAY_PROJECT_ID;
+        const environmentId = process.env.RAILWAY_ENVIRONMENT_ID || 'production';
+        
+        if (railwayApiToken && projectId) {
+          try {
+            // Dynamic import to avoid loading Railway utility unless needed
+            const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
+            await updateSpeakerRefreshToken({
+              apiToken: railwayApiToken,
+              projectId: projectId,
+              environmentId: environmentId,
+              refreshToken: tokenResult.refresh_token
+            });
+            console.log('✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment');
+          } catch (updateError) {
+            console.error('⚠️  Failed to automatically update Railway environment variable:', updateError.message);
+            console.error('   Please manually update SPREAKER_REFRESH_TOKEN to:', tokenResult.refresh_token);
+          }
+        } else {
+          console.log('⚠️  Cannot auto-update Railway environment variable (missing RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID)');
+          console.log('   Please manually update SPREAKER_REFRESH_TOKEN to:', tokenResult.refresh_token);
+        }
+      }
     } catch (error) {
       console.error('❌ OAuth token refresh failed. Exiting gracefully to prevent restart loop.');
       console.error('   Please check your SPREAKER_REFRESH_TOKEN environment variable and regenerate if needed.');
