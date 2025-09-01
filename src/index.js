@@ -12,8 +12,9 @@ import { chatComplete } from './openai-text.js';
 import { synthesizeToMp3 } from './tts.js';
 import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
 import { refreshAccessToken, uploadEpisode, validateRefreshToken, validateSprekerCredentials } from './spreaker.js';
+import { getCurrentTimestamp, detectClockDrift, logTimestampedEvent, validateTimestamp } from './time-utils.js';
 
-// Global counters for tracking OAuth operations
+// Global counters for tracking OAuth operations with enhanced time-based metrics
 let oauthOperationCount = {
   refreshAttempts: 0,
   refreshSuccesses: 0,
@@ -21,13 +22,36 @@ let oauthOperationCount = {
   uploadRetries: 0,
   proactiveChecks: 0,
   railwayUpdates: 0,
-  startupValidations: 0
+  startupValidations: 0,
+  tokenRotations: 0,
+  clockDriftDetections: 0,
+  lastResetTime: getCurrentTimestamp()
 };
 
 /**
- * Log OAuth operation statistics for debugging recurring issues
+ * Log OAuth operation statistics for debugging recurring issues with enhanced time tracking
  */
 function logOAuthStats(context = '') {
+  const currentTime = getCurrentTimestamp();
+  const timeSinceReset = new Date(currentTime) - new Date(oauthOperationCount.lastResetTime);
+  const uptimeMinutes = (timeSinceReset / (1000 * 60)).toFixed(1);
+  
+  logTimestampedEvent(`OAuth Operations Stats${context ? ` (${context})` : ''}`, {
+    refresh_attempts: oauthOperationCount.refreshAttempts,
+    refresh_successes: oauthOperationCount.refreshSuccesses,
+    refresh_failures: oauthOperationCount.refreshFailures,
+    upload_retries: oauthOperationCount.uploadRetries,
+    proactive_checks: oauthOperationCount.proactiveChecks,
+    railway_updates: oauthOperationCount.railwayUpdates,
+    startup_validations: oauthOperationCount.startupValidations,
+    token_rotations: oauthOperationCount.tokenRotations,
+    clock_drift_detections: oauthOperationCount.clockDriftDetections,
+    success_rate: oauthOperationCount.refreshAttempts > 0 
+      ? ((oauthOperationCount.refreshSuccesses / oauthOperationCount.refreshAttempts) * 100).toFixed(1) 
+      : 'N/A',
+    uptime_minutes: uptimeMinutes
+  });
+  
   console.log(`📊 OAuth Operations Stats${context ? ` (${context})` : ''}:`);
   console.log(`   - Token refresh attempts: ${oauthOperationCount.refreshAttempts}`);
   console.log(`   - Token refresh successes: ${oauthOperationCount.refreshSuccesses}`);
@@ -36,7 +60,10 @@ function logOAuthStats(context = '') {
   console.log(`   - Proactive health checks: ${oauthOperationCount.proactiveChecks}`);
   console.log(`   - Railway env updates: ${oauthOperationCount.railwayUpdates}`);
   console.log(`   - Startup validations: ${oauthOperationCount.startupValidations}`);
+  console.log(`   - Token rotations: ${oauthOperationCount.tokenRotations}`);
+  console.log(`   - Clock drift detections: ${oauthOperationCount.clockDriftDetections}`);
   console.log(`   - Success rate: ${oauthOperationCount.refreshAttempts > 0 ? ((oauthOperationCount.refreshSuccesses / oauthOperationCount.refreshAttempts) * 100).toFixed(1) : 'N/A'}%`);
+  console.log(`   - Uptime: ${uptimeMinutes} minutes`);
 }
 
 const SPREADSHEET_ID=process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
@@ -48,36 +75,119 @@ const TZ=process.env.EPISODE_TIMEZONE||'UTC';
 const PUBLISH_TIME=process.env.SPREAKER_PUBLISH_TIME_UTC||'08:00:00';
 
 // Token state management - maintains current refresh token during process execution
+// Enhanced with atomic updates and better tracking
 let currentRefreshToken = process.env.SPREAKER_REFRESH_TOKEN;
 let currentAccessToken = null;
 let tokenExpiresAt = null;
 let refreshInProgress = false;
+let tokenIssuedAt = null; // Track when token was issued for better lifecycle management
 
 /**
- * Get current token status for debugging and monitoring
- * @returns {Object} Token status information
+ * Get current token status for debugging and monitoring with enhanced metadata
+ * @returns {Object} Token status information with timestamps and drift detection
  */
 function getTokenStatus() {
+  const clockDrift = detectClockDrift(2);
+  if (clockDrift.hasDrift) {
+    oauthOperationCount.clockDriftDetections++;
+  }
+  
   return {
+    timestamp: getCurrentTimestamp(),
     hasRefreshToken: !!currentRefreshToken,
     hasAccessToken: !!currentAccessToken,
     isExpired: isTokenExpired(),
     expiresAt: tokenExpiresAt ? new Date(tokenExpiresAt).toISOString() : null,
+    issuedAt: tokenIssuedAt ? new Date(tokenIssuedAt).toISOString() : null,
     refreshInProgress: refreshInProgress,
-    refreshTokenLastChars: currentRefreshToken ? currentRefreshToken.slice(-8) : null
+    refreshTokenLastChars: currentRefreshToken ? currentRefreshToken.slice(-8) : null,
+    clockDrift: clockDrift.hasDrift ? {
+      detected: true,
+      driftSeconds: clockDrift.driftSeconds,
+      warning: clockDrift.warning
+    } : { detected: false },
+    tokenAge: tokenIssuedAt ? Math.floor((Date.now() - tokenIssuedAt) / 1000) : null
   };
 }
 
 /**
+ * Atomic token update function to prevent race conditions and ensure one-time-use
+ * This is the single point of truth for updating token state
+ * @param {string} newAccessToken - New access token
+ * @param {number} expiresIn - Token expiration time in seconds
+ * @param {string} newRefreshToken - New refresh token (optional)
+ * @param {string} issuedAtTimestamp - When token was issued (optional)
+ */
+function atomicTokenUpdate(newAccessToken, expiresIn, newRefreshToken = null, issuedAtTimestamp = null) {
+  const updateTime = getCurrentTimestamp();
+  const oldRefreshToken = currentRefreshToken;
+  const oldAccessToken = currentAccessToken;
+  
+  logTimestampedEvent('Atomic token update started', {
+    old_access_token_present: !!oldAccessToken,
+    old_refresh_token_suffix: oldRefreshToken ? oldRefreshToken.slice(-8) : null,
+    new_access_token_present: !!newAccessToken,
+    new_refresh_token_present: !!newRefreshToken,
+    new_refresh_token_suffix: newRefreshToken ? newRefreshToken.slice(-8) : null,
+    expires_in: expiresIn,
+    update_time: updateTime
+  });
+
+  // Update access token and expiration
+  if (newAccessToken) {
+    currentAccessToken = newAccessToken;
+    tokenExpiresAt = Date.now() + (expiresIn * 1000);
+    tokenIssuedAt = issuedAtTimestamp ? new Date(issuedAtTimestamp).getTime() : Date.now();
+  }
+
+  // Critical: Update refresh token if provided (one-time-use enforcement)
+  if (newRefreshToken && newRefreshToken !== currentRefreshToken) {
+    console.log(`🔄 Token rotation: ${oldRefreshToken?.slice(-8) || 'none'} → ${newRefreshToken.slice(-8)}`);
+    currentRefreshToken = newRefreshToken;
+    oauthOperationCount.tokenRotations++;
+    
+    logTimestampedEvent('Refresh token rotated - old token invalidated', {
+      old_token_invalidated: !!oldRefreshToken,
+      new_token_active: true,
+      rotation_count: oauthOperationCount.tokenRotations
+    });
+    
+    // Explicitly null out old token reference to ensure it's not reused
+    const discardedToken = oldRefreshToken;
+    console.log(`🚮 Old refresh token discarded: ${discardedToken?.slice(-8) || 'none'} (will never be reused)`);
+  }
+
+  logTimestampedEvent('Atomic token update completed', {
+    access_token_updated: !!newAccessToken,
+    refresh_token_rotated: !!(newRefreshToken && newRefreshToken !== oldRefreshToken),
+    expires_at: tokenExpiresAt ? new Date(tokenExpiresAt).toISOString() : null,
+    complete_time: getCurrentTimestamp()
+  });
+}
+
+/**
  * Check if current access token is expired or will expire within the buffer time
+ * Enhanced with timestamp validation and drift detection
  * @param {number} bufferMinutes - Minutes before expiration to consider token expired (default: 5)
  * @returns {boolean} True if token is expired or will expire soon
  */
 function isTokenExpired(bufferMinutes = 5) {
   if (!tokenExpiresAt) return true;
+  
   const now = Date.now();
   const bufferMs = bufferMinutes * 60 * 1000;
-  return now >= (tokenExpiresAt - bufferMs);
+  const isExpired = now >= (tokenExpiresAt - bufferMs);
+  
+  // Validate expiration time against system clock
+  if (tokenExpiresAt) {
+    const validation = validateTimestamp(new Date(tokenExpiresAt).toISOString(), 7200); // 2 hours max age
+    if (!validation.valid && validation.clockDrift) {
+      console.warn('⚠️  Token expiration timestamp indicates system clock drift');
+      oauthOperationCount.clockDriftDetections++;
+    }
+  }
+  
+  return isExpired;
 }
 
 /**
@@ -220,24 +330,39 @@ async function updateRailwayEnvironment(newRefreshToken, context = 'token refres
 
 /**
  * Safely refresh Spreaker access token and update current refresh token state
- * This prevents the token burning issue by maintaining token state within the process
+ * Enhanced with robust one-time-use token rotation and comprehensive logging
+ * This prevents token burning by ensuring atomic updates and proper token lifecycle management
  * Includes proactive refresh, retry logic, and concurrency control
  */
 async function safeRefreshAccessToken() {
+  const refreshStartTime = getCurrentTimestamp();
+  logTimestampedEvent('Token refresh cycle started', {
+    has_current_token: !!currentAccessToken,
+    token_expired: isTokenExpired(),
+    refresh_in_progress: refreshInProgress,
+    current_refresh_token_suffix: currentRefreshToken ? currentRefreshToken.slice(-8) : null
+  });
+
   // If we have a valid access token that's not expired, return it
   if (currentAccessToken && !isTokenExpired()) {
+    logTimestampedEvent('Using existing valid access token - no refresh needed', {
+      token_age: tokenIssuedAt ? Math.floor((Date.now() - tokenIssuedAt) / 1000) : null,
+      expires_at: tokenExpiresAt ? new Date(tokenExpiresAt).toISOString() : null
+    });
     console.log('✅ Using existing valid access token');
     return currentAccessToken;
   }
 
-  // Prevent concurrent refresh attempts
+  // Prevent concurrent refresh attempts with enhanced logging
   if (refreshInProgress) {
+    logTimestampedEvent('Token refresh already in progress - waiting for completion');
     console.log('⏳ Token refresh already in progress, waiting...');
     // Wait for existing refresh to complete (up to 30 seconds)
     for (let i = 0; i < 30; i++) {
       await sleep(1000);
       if (!refreshInProgress) {
         if (currentAccessToken && !isTokenExpired()) {
+          logTimestampedEvent('Token refresh completed by concurrent process');
           console.log('✅ Token refresh completed by another process');
           return currentAccessToken;
         }
@@ -246,17 +371,25 @@ async function safeRefreshAccessToken() {
     }
     // If still in progress after 30s, proceed anyway to avoid deadlock
     if (refreshInProgress) {
+      logTimestampedEvent('Token refresh timeout - proceeding with new attempt to avoid deadlock');
       console.warn('⚠️ Token refresh taking too long, proceeding with new refresh attempt');
     }
   }
 
   refreshInProgress = true;
-  console.log('🔑 Refreshing Spreaker access token using current refresh token...');
   
   if (!currentRefreshToken) {
     refreshInProgress = false;
-    throw new Error('No refresh token available. Please check SPREAKER_REFRESH_TOKEN environment variable.');
+    const error = 'No refresh token available. Please check SPREAKER_REFRESH_TOKEN environment variable.';
+    logTimestampedEvent('Token refresh failed - no refresh token available', { error });
+    throw new Error(error);
   }
+  
+  logTimestampedEvent('Starting token refresh with retry logic', {
+    max_retries: 3,
+    current_refresh_token_suffix: currentRefreshToken.slice(-8),
+    base_delay: 1000
+  });
   
   const maxRetries = 3;
   const baseDelay = 1000; // Start with 1 second
@@ -264,47 +397,79 @@ async function safeRefreshAccessToken() {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       oauthOperationCount.refreshAttempts++;
+      
+      logTimestampedEvent(`Token refresh attempt ${attempt}/${maxRetries} starting`, {
+        attempt_number: attempt,
+        total_attempts: oauthOperationCount.refreshAttempts,
+        using_token_suffix: currentRefreshToken.slice(-8)
+      });
+      
       console.log(`🔄 Token refresh attempt ${attempt}/${maxRetries}`);
       
-      const tokenResult = await refreshAccessToken({ 
+      // Store the refresh token we're using for this attempt to detect if it changes
+      const tokenUsedForRefresh = currentRefreshToken;
+      
+      const tokenResult = await refreshAccessToken({
         client_id: process.env.SPREAKER_CLIENT_ID, 
         client_secret: process.env.SPREAKER_CLIENT_SECRET, 
-        refresh_token: currentRefreshToken 
+        refresh_token: tokenUsedForRefresh // Use the token we captured for this attempt
       });
       
       oauthOperationCount.refreshSuccesses++;
       const accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
       const expiresInSeconds = tokenResult.expires_in || 3600; // Default to 1 hour if not provided
+      const issuedAtTime = tokenResult.issued_at || getCurrentTimestamp();
       
-      // Update current token state
-      currentAccessToken = accessToken;
-      tokenExpiresAt = Date.now() + (expiresInSeconds * 1000);
+      logTimestampedEvent('Token refresh successful - performing atomic update', {
+        attempt_number: attempt,
+        access_token_present: !!accessToken,
+        expires_in: expiresInSeconds,
+        new_refresh_token_present: !!tokenResult.refresh_token,
+        token_rotation_needed: !!(tokenResult.refresh_token && tokenResult.refresh_token !== tokenUsedForRefresh)
+      });
+      
+      // Perform atomic token update - this is the critical one-time-use enforcement
+      atomicTokenUpdate(accessToken, expiresInSeconds, tokenResult.refresh_token, issuedAtTime);
       
       console.log(`✅ Access token refreshed successfully (expires in ${expiresInSeconds} seconds)`);
       console.log(`🕒 Token expires at: ${new Date(tokenExpiresAt).toISOString()}`);
       
-      // Critical: If Spreaker provided a new refresh token, update our current state immediately
-      if (tokenResult.refresh_token && tokenResult.refresh_token !== currentRefreshToken) {
-        console.log('🔄 New refresh token received from Spreaker. Updating current token state...');
-        
-        // Update the current process state FIRST
-        const oldToken = currentRefreshToken;
-        currentRefreshToken = tokenResult.refresh_token;
-        
-        console.log(`🔑 Refresh token updated in process: ${oldToken.slice(-8)} -> ${currentRefreshToken.slice(-8)}`);
-        
-        // Then attempt to update Railway environment variable for future runs
+      // If we rotated the refresh token, update Railway environment
+      if (tokenResult.refresh_token && tokenResult.refresh_token !== tokenUsedForRefresh) {
+        logTimestampedEvent('Initiating Railway environment update for token rotation');
+        // Use the NEW refresh token (from atomicTokenUpdate) for Railway update
         await updateRailwayEnvironment(currentRefreshToken, 'token refresh');
       }
+      
+      logTimestampedEvent('Token refresh cycle completed successfully', {
+        total_duration_ms: new Date(getCurrentTimestamp()) - new Date(refreshStartTime),
+        final_token_suffix: currentRefreshToken ? currentRefreshToken.slice(-8) : null,
+        expires_at: new Date(tokenExpiresAt).toISOString()
+      });
       
       refreshInProgress = false;
       return accessToken;
       
     } catch (error) {
+      oauthOperationCount.refreshFailures++;
+      
+      logTimestampedEvent(`Token refresh attempt ${attempt}/${maxRetries} failed`, {
+        attempt_number: attempt,
+        error_type: error.constructor.name,
+        error_message: error.message,
+        is_invalid_grant: error.message.includes('invalid_grant') || error.message.includes('Invalid refresh token'),
+        will_retry: attempt < maxRetries
+      });
+      
       console.error(`❌ Token refresh attempt ${attempt}/${maxRetries} failed:`, error.message);
       
       // Check if this is an invalid_grant error that won't be resolved by retrying
       if (error.message.includes('invalid_grant') || error.message.includes('Invalid refresh token')) {
+        logTimestampedEvent('Critical: Invalid refresh token detected - stopping retries', {
+          token_suffix: currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined',
+          manual_intervention_required: true
+        });
+        
         console.error('');
         console.error('🚨 CRITICAL: Invalid refresh token detected - retries will not help.');
         console.error('   The refresh token stored in Railway environment variables is expired or invalid.');
@@ -314,7 +479,6 @@ async function safeRefreshAccessToken() {
         console.error(`   Current token (last 8 chars): ${currentRefreshToken ? currentRefreshToken.slice(-8) : 'undefined'}`);
         console.error('');
         refreshInProgress = false;
-        oauthOperationCount.refreshFailures++;
         logOAuthStats('invalid_grant error');
         throw error;
       }
