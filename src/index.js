@@ -86,7 +86,7 @@ async function main(){
       }
       continue;
     }
-    if(!withinNextNDays(parseResult.date,63)) {
+    if(!withinNextNDays(parseResult.date,180)) {
       skippedOutOfRange++;
       console.log(`Row ${row._rowIndex}: Skipped - Out of range. Date: ${parseResult.date.format('YYYY-MM-DD')}, Column: ${dateColumnUsed}`);
       continue;
