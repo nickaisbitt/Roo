@@ -73,7 +73,7 @@ export function withinNextNDays(d, n) {
   if (!d || !d.isValid()) return false;
   const now = dayjs().tz(process.env.EPISODE_TIMEZONE || 'UTC').startOf('day');
   const end = now.add(n, 'day').endOf('day');
-  // Allow episodes from 365 days ago to 63 days in the future
+  // Allow episodes from 365 days ago to N days in the future (typically 180 days)
   const start = now.subtract(365, 'day').startOf('day');
   const date = d.tz(process.env.EPISODE_TIMEZONE || 'UTC');
   return date.isSameOrAfter(start) && date.isSameOrBefore(end);
