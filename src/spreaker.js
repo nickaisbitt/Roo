@@ -30,7 +30,19 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     });
     
     console.log('Successfully refreshed Spreaker access token');
-    return res.data.access_token;
+    
+    // Return both access token and any new refresh token provided
+    const result = { 
+      access_token: res.data.access_token 
+    };
+    
+    // If Spreaker provides a new refresh token, include it in the response
+    if (res.data.refresh_token) {
+      result.refresh_token = res.data.refresh_token;
+      console.log('⚠️  New refresh token received - update SPREAKER_REFRESH_TOKEN environment variable to:', res.data.refresh_token);
+    }
+    
+    return result;
   } catch (error) {
     console.error('Failed to refresh Spreaker access token:', error.message);
     if (error.response) {
