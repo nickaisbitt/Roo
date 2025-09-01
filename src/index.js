@@ -297,32 +297,101 @@ async function validateTokenAtStartup() {
 }
 
 /**
- * Update Railway environment variable with retry logic
+ * Update Railway environment variable with enhanced retry logic and validation
+ * @param {string} newRefreshToken - New refresh token to store
+ * @param {string} context - Context of the update (for logging)
  */
 async function updateRailwayEnvironment(newRefreshToken, context = 'token refresh') {
   const railwayApiToken = process.env.RAILWAY_API_TOKEN;
   const projectId = process.env.RAILWAY_PROJECT_ID;
   const environmentId = process.env.RAILWAY_ENVIRONMENT_ID || 'production';
   
+  logTimestampedEvent('Railway environment update requested', {
+    context: context,
+    has_api_token: !!railwayApiToken,
+    has_project_id: !!projectId,
+    environment_id: environmentId,
+    new_token_suffix: newRefreshToken ? newRefreshToken.slice(-8) : 'undefined'
+  });
+  
   if (!railwayApiToken || !projectId) {
+    logTimestampedEvent('Railway environment update skipped - missing credentials', {
+      missing_api_token: !railwayApiToken,
+      missing_project_id: !projectId
+    });
     console.log('⚠️  Cannot auto-update Railway environment variable (missing RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID)');
     console.log('   Please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
     return;
   }
   
-  try {
-    const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
-    await updateSpeakerRefreshToken({
-      apiToken: railwayApiToken,
-      projectId: projectId,
-      environmentId: environmentId,
-      refreshToken: newRefreshToken
+  // Validate the new refresh token before storing it
+  if (!newRefreshToken || typeof newRefreshToken !== 'string' || newRefreshToken.length < 20) {
+    logTimestampedEvent('Railway environment update failed - invalid token', {
+      token_present: !!newRefreshToken,
+      token_type: typeof newRefreshToken,
+      token_length: newRefreshToken ? newRefreshToken.length : 0
     });
-    oauthOperationCount.railwayUpdates++;
-    console.log(`✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment (${context})`);
-  } catch (updateError) {
-    console.error(`⚠️  Failed to automatically update Railway environment variable during ${context}:`, updateError.message);
-    console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
+    console.error('⚠️  Cannot update Railway environment - invalid refresh token provided');
+    return;
+  }
+  
+  const maxRetries = 3;
+  const baseDelay = 2000; // Start with 2 seconds for Railway API
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      logTimestampedEvent(`Railway update attempt ${attempt}/${maxRetries}`, {
+        attempt_number: attempt,
+        context: context
+      });
+      
+      const { updateSpeakerRefreshToken } = await import('../utils/railway-env-updater.js');
+      await updateSpeakerRefreshToken({
+        apiToken: railwayApiToken,
+        projectId: projectId,
+        environmentId: environmentId,
+        refreshToken: newRefreshToken
+      });
+      
+      oauthOperationCount.railwayUpdates++;
+      logTimestampedEvent('Railway environment update successful', {
+        attempt_number: attempt,
+        total_railway_updates: oauthOperationCount.railwayUpdates,
+        context: context
+      });
+      console.log(`✅ Successfully updated SPREAKER_REFRESH_TOKEN in Railway environment (${context})`);
+      return;
+      
+    } catch (updateError) {
+      logTimestampedEvent(`Railway update attempt ${attempt}/${maxRetries} failed`, {
+        attempt_number: attempt,
+        error_message: updateError.message,
+        error_type: updateError.constructor.name,
+        will_retry: attempt < maxRetries
+      });
+      
+      console.error(`⚠️  Railway update attempt ${attempt}/${maxRetries} failed:`, updateError.message);
+      
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff: 2s, 4s, 8s
+        logTimestampedEvent(`Retrying Railway update in ${delay}ms`, {
+          delay_ms: delay,
+          next_attempt: attempt + 1
+        });
+        console.log(`⏳ Retrying Railway update in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        await sleep(delay);
+        continue;
+      } else {
+        logTimestampedEvent('All Railway update attempts failed', {
+          total_attempts: maxRetries,
+          final_error: updateError.message,
+          context: context,
+          manual_update_required: true
+        });
+        console.error(`❌ All Railway update attempts failed after ${maxRetries} retries`);
+        console.error('   Current process will continue with new token, but please manually update SPREAKER_REFRESH_TOKEN to:', newRefreshToken);
+      }
+    }
   }
 }
 
