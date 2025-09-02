@@ -102,6 +102,23 @@ async function makeBridgeRequest(endpoint, options = {}) {
  */
 export async function checkBridgeHealth() {
   try {
+    // First validate the URL before attempting the request
+    if (!isValidUrl(process.env.TOKEN_BRIDGE_URL)) {
+      const invalidUrlError = `Bridge URL is invalid or not configured: ${process.env.TOKEN_BRIDGE_URL || 'undefined'}`;
+      logBridgeClient('Health check failed - invalid URL', {
+        error_message: invalidUrlError,
+        error_type: 'Configuration',
+        env_url: process.env.TOKEN_BRIDGE_URL,
+        default_url: BRIDGE_CONFIG.baseUrl
+      });
+      
+      return {
+        available: false,
+        healthy: false,
+        error: invalidUrlError
+      };
+    }
+    
     const startTime = getCurrentTimestamp();
     
     // Public health endpoint - no auth required
@@ -238,20 +255,50 @@ export async function updateBridgeRefreshToken(newRefreshToken) {
 }
 
 /**
+ * Validate if a URL is properly formatted and not a default/fallback value
+ */
+function isValidUrl(urlString) {
+  // Check for empty, undefined, null values
+  if (!urlString || urlString.trim() === '') {
+    return false;
+  }
+  
+  // Don't allow localhost URLs in production as they indicate misconfiguration
+  const trimmedUrl = urlString.trim();
+  if (trimmedUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  
+  try {
+    const url = new URL(trimmedUrl);
+    // Must be http or https
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if bridge service is configured and available
  */
 export function isBridgeConfigured() {
-  return !!(BRIDGE_CONFIG.baseUrl && BRIDGE_CONFIG.secret);
+  const hasSecret = !!BRIDGE_CONFIG.secret;
+  const hasValidUrl = isValidUrl(process.env.TOKEN_BRIDGE_URL); // Check original env var, not the defaulted value
+  
+  return hasSecret && hasValidUrl;
 }
 
 /**
  * Get bridge configuration status for diagnostics
  */
 export function getBridgeConfig() {
+  const originalUrl = process.env.TOKEN_BRIDGE_URL;
   return {
     configured: isBridgeConfigured(),
     base_url: BRIDGE_CONFIG.baseUrl,
+    original_env_url: originalUrl,
     has_secret: !!BRIDGE_CONFIG.secret,
+    url_valid: isValidUrl(originalUrl),
     timeout: BRIDGE_CONFIG.timeout,
     retry_attempts: BRIDGE_CONFIG.retryAttempts
   };
