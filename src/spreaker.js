@@ -3,6 +3,12 @@ import FormData from 'form-data';
 import fs from 'fs';
 import { sendAdminEmail } from './sendAdminEmail.js';
 import { getCurrentTimestamp, detectClockDrift, logTimestampedEvent } from './time-utils.js';
+import { 
+  checkBridgeHealth, 
+  refreshTokenViaBridge, 
+  isBridgeConfigured,
+  getBridgeConfig
+} from './bridge-client.js';
 
 const BASE = 'https://api.spreaker.com';
 
@@ -247,22 +253,77 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     return result;
   } catch (error) {
     const errorTime = getCurrentTimestamp();
-    logTimestampedEvent('Token refresh failed', {
+    logTimestampedEvent('Direct token refresh failed', {
       error_type: error.constructor.name,
       has_response: !!error.response,
       error_message: error.message,
       error_time: errorTime,
-      request_duration_ms: new Date(errorTime) - new Date(startTime)
+      request_duration_ms: new Date(errorTime) - new Date(startTime),
+      will_try_bridge: isBridgeConfigured()
     });
     
-    console.error('❌ Failed to refresh Spreaker access token:', error.message);
+    console.error('❌ Direct Spreaker token refresh failed:', error.message);
+    
+    // Try bridge service as fallback if configured
+    if (isBridgeConfigured()) {
+      console.log('🌉 Attempting token refresh via bridge service fallback...');
+      
+      try {
+        // Check bridge health first
+        const bridgeHealth = await checkBridgeHealth();
+        if (!bridgeHealth.healthy) {
+          console.warn('⚠️ Bridge service is not healthy, skipping bridge fallback');
+          throw new Error(`Bridge service unhealthy: ${bridgeHealth.error || 'unknown'}`);
+        }
+        
+        logTimestampedEvent('Bridge fallback initiated', {
+          bridge_health: bridgeHealth.healthy,
+          direct_error: error.message
+        });
+        
+        const bridgeResult = await refreshTokenViaBridge(true); // Force refresh
+        
+        logTimestampedEvent('Bridge fallback successful', {
+          cached: bridgeResult.cached,
+          expires_in_seconds: bridgeResult.expires_in,
+          rotation_count: bridgeResult.rotation_count
+        });
+        
+        console.log('✅ Token refresh successful via bridge service');
+        console.log(`🕒 Access token expires in ${bridgeResult.expires_in || 'unknown'} seconds`);
+        
+        // Return bridge result in same format as direct refresh
+        return {
+          access_token: bridgeResult.access_token,
+          expires_in: bridgeResult.expires_in,
+          refresh_token: bridgeResult.refresh_token,
+          issued_at: getCurrentTimestamp(),
+          source: 'bridge' // Mark as bridge-sourced for logging
+        };
+        
+      } catch (bridgeError) {
+        logTimestampedEvent('Bridge fallback failed', {
+          bridge_error: bridgeError.message,
+          original_error: error.message
+        });
+        
+        console.error('❌ Bridge service fallback also failed:', bridgeError.message);
+        console.error('🔧 Both direct and bridge token refresh failed - manual intervention required');
+        
+        // Continue with original error handling since bridge failed too
+      }
+    } else {
+      console.log('🚫 Bridge service not configured - skipping fallback');
+      console.log('💡 Configure TOKEN_BRIDGE_URL and BRIDGE_SECRET to enable bridge fallback');
+    }
     
     // Enhanced debugging information with timestamps
     console.error('Error details:', {
       errorType: error.constructor.name,
       hasResponse: !!error.response,
       timestamp: errorTime,
-      requestStartTime: startTime
+      requestStartTime: startTime,
+      bridgeConfigured: isBridgeConfigured()
     });
     
     if (error.response) {

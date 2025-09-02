@@ -13,6 +13,12 @@ import { synthesizeToMp3 } from './tts.js';
 import { coerceBoolean, parsePublishDateDDMMYYYY, withinNextNDays, wordCount, sanitizeTags } from './utils.js';
 import { refreshAccessToken, uploadEpisode, validateRefreshToken, validateSprekerCredentials } from './spreaker.js';
 import { getCurrentTimestamp, detectClockDrift, logTimestampedEvent, validateTimestamp } from './time-utils.js';
+import { 
+  checkBridgeHealth, 
+  isBridgeConfigured, 
+  getBridgeConfig,
+  getBridgeTokenStatus 
+} from './bridge-client.js';
 
 // Global counters for tracking OAuth operations with enhanced time-based metrics
 let oauthOperationCount = {
@@ -25,6 +31,9 @@ let oauthOperationCount = {
   startupValidations: 0,
   tokenRotations: 0,
   clockDriftDetections: 0,
+  bridgeFallbacks: 0,
+  bridgeSuccesses: 0,
+  bridgeFailures: 0,
   lastResetTime: getCurrentTimestamp()
 };
 
@@ -46,6 +55,9 @@ function logOAuthStats(context = '') {
     startup_validations: oauthOperationCount.startupValidations,
     token_rotations: oauthOperationCount.tokenRotations,
     clock_drift_detections: oauthOperationCount.clockDriftDetections,
+    bridge_fallbacks: oauthOperationCount.bridgeFallbacks,
+    bridge_successes: oauthOperationCount.bridgeSuccesses,
+    bridge_failures: oauthOperationCount.bridgeFailures,
     success_rate: oauthOperationCount.refreshAttempts > 0 
       ? ((oauthOperationCount.refreshSuccesses / oauthOperationCount.refreshAttempts) * 100).toFixed(1) 
       : 'N/A',
@@ -62,6 +74,9 @@ function logOAuthStats(context = '') {
   console.log(`   - Startup validations: ${oauthOperationCount.startupValidations}`);
   console.log(`   - Token rotations: ${oauthOperationCount.tokenRotations}`);
   console.log(`   - Clock drift detections: ${oauthOperationCount.clockDriftDetections}`);
+  console.log(`   - Bridge fallbacks: ${oauthOperationCount.bridgeFallbacks}`);
+  console.log(`   - Bridge successes: ${oauthOperationCount.bridgeSuccesses}`);
+  console.log(`   - Bridge failures: ${oauthOperationCount.bridgeFailures}`);
   console.log(`   - Success rate: ${oauthOperationCount.refreshAttempts > 0 ? ((oauthOperationCount.refreshSuccesses / oauthOperationCount.refreshAttempts) * 100).toFixed(1) : 'N/A'}%`);
   console.log(`   - Uptime: ${uptimeMinutes} minutes`);
 }
@@ -208,6 +223,38 @@ async function sleep(ms, jitterPercent = 10) {
 async function validateTokenAtStartup() {
   console.log('🔍 Validating refresh token at startup...');
   oauthOperationCount.startupValidations++;
+  
+  // Check bridge service configuration first
+  if (isBridgeConfigured()) {
+    console.log('🌉 Bridge service is configured - checking health...');
+    try {
+      const bridgeHealth = await checkBridgeHealth();
+      if (bridgeHealth.healthy) {
+        console.log('✅ Bridge service is healthy and available as fallback');
+        console.log(`   - Bridge version: ${bridgeHealth.response.version || 'unknown'}`);
+        console.log(`   - Token status: ${bridgeHealth.response.token_status?.has_refresh_token ? 'Available' : 'Missing'}`);
+      } else {
+        console.warn('⚠️ Bridge service is configured but not healthy');
+        console.warn(`   Error: ${bridgeHealth.error}`);
+      }
+    } catch (bridgeError) {
+      console.warn('⚠️ Bridge service check failed:', bridgeError.message);
+      console.warn('   Direct token refresh will be the only option');
+    }
+  } else {
+    console.log('🚫 Bridge service not configured (TOKEN_BRIDGE_URL/BRIDGE_SECRET missing)');
+    console.log('   Direct token refresh will be used exclusively');
+  }
+
+  // Check for system clock drift at startup
+  const clockDrift = detectClockDrift();
+  if (clockDrift.driftMs > 2000) {
+    oauthOperationCount.clockDriftDetections++;
+    console.warn(`⚠️ System clock drift detected at startup: ${clockDrift.driftMs}ms`);
+    console.warn('   This may cause OAuth token timing issues');
+    console.warn(`   System time: ${clockDrift.systemTime}`);
+    console.warn(`   Reference time: ${clockDrift.referenceTime}`);
+  }
   
   if (!currentRefreshToken) {
     throw new Error('No SPREAKER_REFRESH_TOKEN environment variable found. Please set this before deployment.');
@@ -484,7 +531,14 @@ async function safeRefreshAccessToken() {
         refresh_token: tokenUsedForRefresh // Use the token we captured for this attempt
       });
       
-      oauthOperationCount.refreshSuccesses++;
+      // Track bridge service usage
+      if (tokenResult.source === 'bridge') {
+        oauthOperationCount.bridgeSuccesses++;
+        console.log(`🌉 Token refresh completed via bridge service`);
+      } else {
+        oauthOperationCount.refreshSuccesses++;
+      }
+      
       const accessToken = typeof tokenResult === 'string' ? tokenResult : tokenResult.access_token;
       const expiresInSeconds = tokenResult.expires_in || 3600; // Default to 1 hour if not provided
       const issuedAtTime = tokenResult.issued_at || getCurrentTimestamp();
