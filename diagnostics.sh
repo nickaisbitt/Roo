@@ -298,6 +298,52 @@ done
 
 echo
 
+# Bridge Service Check
+echo "🌉 Token Bridge Service Check"
+echo "------------------------------"
+
+# Check if bridge service files exist
+if [ -f "token-bridge.js" ]; then
+    echo -e "✅ ${GREEN}token-bridge.js${NC} - Bridge service available"
+    
+    # Check bridge configuration
+    if [ -n "$BRIDGE_SECRET" ] || [ -n "$TOKEN_BRIDGE_SECRET" ]; then
+        echo -e "✅ ${GREEN}Bridge Secret${NC} - Configured"
+    else
+        echo -e "⚠️  ${YELLOW}Bridge Secret${NC} - Not configured (optional for fallback)"
+    fi
+    
+    if [ -n "$TOKEN_BRIDGE_URL" ]; then
+        echo -e "✅ ${GREEN}Bridge URL${NC} - Configured ($TOKEN_BRIDGE_URL)"
+        
+        # Test bridge service connectivity if URL is localhost
+        if [[ "$TOKEN_BRIDGE_URL" == *"localhost"* ]] || [[ "$TOKEN_BRIDGE_URL" == *"127.0.0.1"* ]]; then
+            echo "Testing bridge service connectivity..."
+            if curl -s "$TOKEN_BRIDGE_URL/health" >/dev/null 2>&1; then
+                echo -e "✅ ${GREEN}Bridge Service${NC} - Running and accessible"
+            else
+                echo -e "⚠️  ${YELLOW}Bridge Service${NC} - Not running (start with: npm run bridge)"
+            fi
+        fi
+    else
+        echo -e "⚠️  ${YELLOW}Bridge URL${NC} - Not configured (will use direct token refresh only)"
+    fi
+    
+    echo
+    echo "Bridge Service Commands:"
+    echo "  • Start bridge: npm run bridge"
+    echo "  • Start bridge (dev): npm run bridge-dev"  
+    echo "  • Test bridge: BRIDGE_SECRET=your_secret node test-bridge-client.js"
+    echo
+    echo "Bridge Service Documentation:"
+    echo "  • See TOKEN_BRIDGE_README.md for detailed setup"
+    echo "  • Copy .env.bridge.example to .env and configure"
+else
+    echo -e "❌ ${RED}token-bridge.js${NC} - Bridge service not found"
+fi
+
+echo
+
 # Summary
 echo "📋 Diagnostic Summary" 
 echo "--------------------"

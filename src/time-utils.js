@@ -39,6 +39,7 @@ export function detectClockDrift(driftThresholdSeconds = 2) {
     timestamp: new Date(now).toISOString(),
     hasDrift: false,
     driftSeconds: 0,
+    driftMs: 0,
     serverTime: new Date(now).toISOString(),
     warning: null
   };
@@ -58,6 +59,7 @@ export function detectClockDrift(driftThresholdSeconds = 2) {
   const drift = Math.abs(actualElapsed - expectedElapsed) / 1000;
 
   result.driftSeconds = drift;
+  result.driftMs = drift * 1000; // Also provide milliseconds for consistency
   result.hasDrift = drift > driftThresholdSeconds;
 
   if (result.hasDrift) {
