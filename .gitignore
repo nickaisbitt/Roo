@@ -6,3 +6,5 @@ dist/
 build/
 tmp/
 .DS_Store
+test-*.js
+*test*.js
