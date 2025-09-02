@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "bridge": "node token-bridge.js",
-    "bridge-dev": "node --watch token-bridge.js",
+
     "init": "node roo-dev.js init",
     "search": "node roo-dev.js search",
     "dev-help": "node roo-dev.js help",

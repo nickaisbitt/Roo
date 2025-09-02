@@ -1,4 +1,4 @@
-# Token Bridge Service
+# Token Bridge Service Integration
 
 The Token Bridge Service provides a reliable, separate service for managing Spreaker OAuth token refresh operations. This service acts as a fallback mechanism when direct token refresh fails, implementing robust one-time-use token rotation and comprehensive error handling.
 
@@ -12,43 +12,26 @@ The bridge service was created to address token refresh reliability issues by pr
 - **REST API**: Easy integration with the main application and external tools
 - **Security**: Token-based authentication and masked sensitive data in logs
 
-## Quick Start
+## Bridge Service Deployment
 
-### 1. Environment Variables
+**Note**: This application integrates with an external bridge service that should be deployed separately (e.g., on Railway). The bridge service is not included in this repository.
 
-Set these environment variables for the bridge service:
+### Required Bridge Service Features
 
-```bash
-# Required
-SPREAKER_CLIENT_ID=your_spreaker_client_id
-SPREAKER_CLIENT_SECRET=your_spreaker_client_secret
-SPREAKER_REFRESH_TOKEN=your_current_refresh_token
-BRIDGE_SECRET=your_strong_random_secret_key
+Your external bridge service should provide these API endpoints:
 
-# Optional
-BRIDGE_PORT=5000  # Default: 5000 (or PORT environment variable)
-```
+- `GET /health` - Health check endpoint
+- `GET /token/status` - Get current token status (requires auth)
+- `POST /token/refresh` - Refresh access token (requires auth)
+- `POST /token/update` - Update refresh token (requires auth)
 
-### 2. Start the Bridge Service
-
-```bash
-# Development mode (with file watching)
-npm run bridge-dev
-
-# Production mode
-npm run bridge
-
-# Or directly with Node.js
-node token-bridge.js
-```
-
-### 3. Configure Main Application
+### Configure Main Application
 
 Set these environment variables in your main application:
 
 ```bash
-TOKEN_BRIDGE_URL=http://localhost:5000  # or your bridge service URL
-BRIDGE_SECRET=same_secret_as_bridge_service
+TOKEN_BRIDGE_URL=https://your-bridge-service.up.railway.app
+BRIDGE_SECRET=your_strong_random_secret_key
 ```
 
 ## API Endpoints
@@ -219,29 +202,20 @@ DEBUG=1 npm run bridge
 
 ## Deployment
 
-### Railway Deployment
+### External Bridge Service
 
-1. Create a new Railway service for the bridge
-2. Set environment variables in Railway dashboard
-3. Deploy the bridge service
-4. Update main application with bridge service URL
+The bridge service should be deployed separately from this main application. Popular deployment options include:
 
-### Docker Deployment
-
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-EXPOSE 5000
-CMD ["node", "token-bridge.js"]
-```
+- **Railway**: Deploy the bridge service as a separate Railway app
+- **Heroku**: Deploy as a standalone Heroku application  
+- **Vercel**: Deploy as serverless functions
+- **Digital Ocean**: Deploy on droplets or app platform
+- **AWS/GCP/Azure**: Deploy on cloud platforms
 
 ### Environment-Specific Configuration
 
 ```bash
-# Development
+# Development (if running bridge locally for testing)
 TOKEN_BRIDGE_URL=http://localhost:5000
 
 # Production  
@@ -255,12 +229,12 @@ TOKEN_BRIDGE_URL=https://staging-bridge.your-domain.com
 
 ### Test Bridge Health
 ```bash
-curl http://localhost:5000/health | jq '.'
+curl https://your-bridge-service.up.railway.app/health | jq '.'
 ```
 
 ### Test Token Refresh
 ```bash
-curl -X POST http://localhost:5000/token/refresh \
+curl -X POST https://your-bridge-service.up.railway.app/token/refresh \
   -H "Authorization: Bearer your_bridge_secret" \
   -H "Content-Type: application/json" \
   -d '{"force": true}'

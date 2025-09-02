@@ -12,25 +12,23 @@ The implementation successfully addresses the user's need for a separate bridge 
 4. ✅ **Clock drift detection** - Automatic warnings for drift >2 seconds
 5. ✅ **Separate bridge service** - Independent token management service
 
-## 🌉 **Token Bridge Service Implementation**
+## 🌉 **Token Bridge Service Integration**
 
 ### Core Components
-- **`token-bridge.js`** - Standalone service with REST API
-- **`src/bridge-client.js`** - Integration client for main application
-- **`TOKEN_BRIDGE_README.md`** - Complete documentation
-- **`.env.bridge.example`** - Configuration template
+- **`src/bridge-client.js`** - Integration client for communicating with external bridge service
+- **`TOKEN_BRIDGE_README.md`** - Complete documentation for bridge integration
+- **`.env.bridge.example`** - Configuration template for external bridge service
 
 ### Key Features
-- **Independent Operation**: Runs separately from main application
-- **REST API**: `/health`, `/token/status`, `/token/refresh`, `/token/update`
+- **External Service Integration**: Communicates with separately deployed bridge service  
+- **REST API Support**: `/health`, `/token/status`, `/token/refresh`, `/token/update`
 - **Security**: Token-based authentication, data masking
-- **One-Time-Use Enforcement**: Prevents token burning
+- **One-Time-Use Enforcement**: Prevents token burning through proper integration
 - **Comprehensive Logging**: Detailed operation tracking
 
-### NPM Scripts Added
-```bash
-npm run bridge      # Start bridge service
-npm run bridge-dev  # Start with file watching
+### Deployment Model
+```
+Main Application (this repo) ←→ External Bridge Service (Railway/Heroku/etc.)
 ```
 
 ## 🔧 **Enhanced Main Application**
