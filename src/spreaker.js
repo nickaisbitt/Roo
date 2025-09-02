@@ -84,7 +84,8 @@ async function validateSprekerCredentials(client_id, client_secret) {
     const response = await axios.post(`${BASE}/oauth2/token`, form, {
       headers: {
         ...form.getHeaders()
-      }
+      },
+      timeout: 15000 // 15 second timeout for OAuth requests
     });
 
     // This should not happen with our invalid test token
@@ -203,7 +204,8 @@ export async function refreshAccessToken({ client_id, client_secret, refresh_tok
     const res = await axios.post(url, form, {
       headers: {
         ...form.getHeaders()
-      }
+      },
+      timeout: 15000 // 15 second timeout for OAuth requests
     });
     
     const responseTime = getCurrentTimestamp();
@@ -451,7 +453,8 @@ export async function uploadEpisode({
       Authorization: `Bearer ${accessToken}`,
       ...form.getHeaders()
     },
-    maxBodyLength: Infinity
+    maxBodyLength: Infinity,
+    timeout: 60000 // 60 second timeout for file uploads (longer due to file size)
   });
 
   const episodeId = res.data?.response?.episode?.episode_id || res.data?.response?.items?.[0]?.episode_id;
