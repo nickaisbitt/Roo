@@ -6,6 +6,7 @@ Welcome to the comprehensive documentation for the Roo podcast automation system
 
 ### Core Documentation
 - **[README.md](./README.md)** - Main project documentation with automation overview
+- **[COMPLETE_PROCESS_GUIDE.md](./COMPLETE_PROCESS_GUIDE.md)** - **🌟 COMPREHENSIVE START-TO-FINISH GUIDE** - Impeccably detailed instructions for new operators
 - **[MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md)** - Complete manual workflow instructions
 - **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** - Essential commands and quick reference
 - **[EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)** - Step-by-step example processing one episode
@@ -19,9 +20,10 @@ Welcome to the comprehensive documentation for the Roo podcast automation system
 ## 🚀 Getting Started
 
 ### For First-Time Setup
-1. **Run diagnostics**: `./diagnostics.sh` to check your configuration
-2. **Review environment setup** in [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md#prerequisites)
-3. **Test with example** from [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)
+1. **Start here**: [COMPLETE_PROCESS_GUIDE.md](./COMPLETE_PROCESS_GUIDE.md) - The most detailed guide for complete beginners
+2. **Run diagnostics**: `./diagnostics.sh` to check your configuration
+3. **Review environment setup** in [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md#prerequisites)
+4. **Test with example** from [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)
 
 ### For Troubleshooting
 1. **Run diagnostics**: `./diagnostics.sh` to identify issues
@@ -29,9 +31,10 @@ Welcome to the comprehensive documentation for the Roo podcast automation system
 3. **Review error solutions** in [QUICK_REFERENCE.md](./QUICK_REFERENCE.md#common-error-messages--solutions)
 
 ### For Manual Operation
-1. **Follow complete workflow** in [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md)
-2. **Use command reference** from [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
-3. **Follow practical example** in [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)
+1. **Complete beginner**: [COMPLETE_PROCESS_GUIDE.md](./COMPLETE_PROCESS_GUIDE.md) - Extremely detailed step-by-step process
+2. **Experienced user**: [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md) - Streamlined workflow instructions
+3. **Command reference**: [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) - Quick command lookup
+4. **Practical example**: [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md) - Real episode walkthrough
 
 ## 🔧 Workflow Overview
 
@@ -55,6 +58,11 @@ Each step can be performed manually using the documentation provided.
 1. Run: `./diagnostics.sh`
 2. Check: [Troubleshooting Guide](./MANUAL_WORKFLOW.md#troubleshooting)
 3. Try: Manual process from [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md)
+
+### "I'm completely new and need to do this manually"
+1. **Start here**: [COMPLETE_PROCESS_GUIDE.md](./COMPLETE_PROCESS_GUIDE.md) - Comprehensive guide for beginners
+2. **Cross-reference**: [MANUAL_WORKFLOW.md](./MANUAL_WORKFLOW.md) for additional details
+3. **Practice**: [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md) for hands-on learning
 
 ### "I need to process one episode manually"
 1. Follow: [EXAMPLE_WALKTHROUGH.md](./EXAMPLE_WALKTHROUGH.md)
