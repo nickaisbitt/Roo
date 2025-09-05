@@ -10,12 +10,14 @@ This Cron job runs once per week on Railway and will:
 
 **→ [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md) - Start here for all documentation**
 
+**🌟 NEW: [COMPLETE_PROCESS_GUIDE.md](./COMPLETE_PROCESS_GUIDE.md) - Impeccably detailed start-to-finish guide for new operators**
+
 The documentation includes:
-- Complete manual workflow instructions
-- API command references  
-- Troubleshooting guides
-- System diagnostic tools
-- Step-by-step examples
+- **Complete step-by-step manual process** with extreme detail for beginners
+- API command references and troubleshooting guides
+- System diagnostic tools and verification procedures  
+- Practical examples and edge case handling
+- Emergency procedures and recovery methods
 
 Use these resources when the automation fails or when you need to understand the process in detail.
 
