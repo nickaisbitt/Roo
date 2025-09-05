@@ -1,0 +1,922 @@
+{
+  "name": "Roo Podcast Automation - Complete Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0,
+              "weekday": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Triggers weekly podcast automation - Mondays at 8:00 AM"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize workflow variables and validate environment\nconst requiredVars = [\n  'GOOGLE_SHEETS_SPREADSHEET_ID',\n  'GOOGLE_SHEETS_TAB_NAME', \n  'OPENAI_API_KEY',\n  'SPREAKER_CLIENT_ID',\n  'SPREAKER_CLIENT_SECRET',\n  'SPREAKER_REFRESH_TOKEN',\n  'SPREAKER_SHOW_ID'\n];\n\nconst missing = requiredVars.filter(v => !$vars[v]);\nif (missing.length > 0) {\n  throw new Error(`Missing required variables: ${missing.join(', ')}`);\n}\n\n// Set default values\nconst config = {\n  MAX_EPISODES: parseInt($vars.MAX_EPISODES_PER_RUN || '2'),\n  DRY_RUN: ($vars.DRY_RUN || 'false').toLowerCase() === 'true',\n  TIMEZONE: $vars.EPISODE_TIMEZONE || 'UTC',\n  PUBLISH_TIME: $vars.SPREAKER_PUBLISH_TIME_UTC || '08:00:00',\n  OPENAI_TEXT_MODEL: $vars.OPENAI_TEXT_MODEL || 'gpt-4o'\n};\n\n// Log startup\nconsole.log('🚀 Starting Roo Podcast Automation Workflow');\nconsole.log('Configuration:', config);\n\nreturn [{\n  json: {\n    config,\n    timestamp: new Date().toISOString(),\n    status: 'initialized'\n  }\n}];"
+      },
+      "id": "init-workflow",
+      "name": "Initialize Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "Validates environment variables and initializes workflow configuration"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "serviceAccountJSON": "={{ $vars.GOOGLE_SERVICE_ACCOUNT_JSON }}",
+        "documentId": "={{ $vars.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+        "sheetName": "={{ $vars.GOOGLE_SHEETS_TAB_NAME }}",
+        "operation": "readRows",
+        "options": {}
+      },
+      "id": "read-google-sheets",
+      "name": "Read Episode Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        680,
+        300
+      ],
+      "notes": "Reads all episode data from Google Sheets"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter episodes for processing\nconst rows = $input.all();\nconst config = $('Initialize Workflow').first().json.config;\nconst now = new Date();\nconst maxDate = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000)); // 180 days from now\nconst minDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000)); // 1 year ago\n\nconst candidates = [];\nlet skipped = {\n  invalidDate: 0,\n  outOfRange: 0,\n  alreadyGenerated: 0,\n  emptyDate: 0\n};\n\nfor (const item of rows) {\n  const row = item.json;\n  \n  // Get publish date from various possible column names\n  const pubRaw = row['publish_date'] || row['date'] || row['episode date'] || row['publish'] || '';\n  \n  if (!pubRaw || pubRaw.trim() === '') {\n    skipped.emptyDate++;\n    continue;\n  }\n  \n  // Parse date in DD/MM/YYYY format\n  let publishDate;\n  try {\n    const parts = pubRaw.split('/');\n    if (parts.length === 3) {\n      const day = parseInt(parts[0]);\n      const month = parseInt(parts[1]) - 1; // Month is 0-indexed\n      const year = parseInt(parts[2]);\n      publishDate = new Date(year, month, day);\n      \n      if (isNaN(publishDate.getTime())) {\n        throw new Error('Invalid date');\n      }\n    } else {\n      throw new Error('Date not in DD/MM/YYYY format');\n    }\n  } catch (error) {\n    skipped.invalidDate++;\n    continue;\n  }\n  \n  // Check date range\n  if (publishDate < minDate || publishDate > maxDate) {\n    skipped.outOfRange++;\n    continue;\n  }\n  \n  // Check if already generated (only skip if explicitly TRUE/YES/1)\n  const generated = row['generated'] || '';\n  const isExplicitlyGenerated = generated && generated.toString().trim() !== '' && \n    ['true', 'yes', '1', 'TRUE', 'YES'].includes(generated.toString().trim());\n  \n  if (isExplicitlyGenerated) {\n    skipped.alreadyGenerated++;\n    continue;\n  }\n  \n  // Get topic and type\n  const topic = row['topic'] || row['title'] || row['episode topic'] || row['episode title'] || 'Untitled';\n  const episodeType = (row['type'] || row['episode_type'] || row['episode type'] || '').toLowerCase();\n  const type = episodeType.includes('friday') || episodeType.includes('healing') ? 'friday' : 'main';\n  \n  candidates.push({\n    ...row,\n    _rowIndex: row._rowIndex || candidates.length + 2, // Assume header row\n    _parsedDate: publishDate,\n    _topic: topic,\n    _type: type,\n    _inputString: `${publishDate.toLocaleDateString('en-GB')} ${type === 'main' ? 'Main Podcast' : 'Friday Healing'} **${topic}** ${topic}`\n  });\n}\n\n// Sort by date and limit to MAX_EPISODES\nconst sortedCandidates = candidates.sort((a, b) => a._parsedDate - b._parsedDate);\nconst toProcess = sortedCandidates.slice(0, config.MAX_EPISODES);\n\nconsole.log(`Found ${candidates.length} candidate episodes`);\nconsole.log(`Skipped: ${skipped.invalidDate} invalid dates, ${skipped.outOfRange} out of range, ${skipped.alreadyGenerated} already generated, ${skipped.emptyDate} empty dates`);\nconsole.log(`Will process: ${toProcess.length} episodes`);\n\nif (toProcess.length === 0) {\n  return [{ json: { status: 'no_episodes', message: 'No episodes to process', skipped } }];\n}\n\n// Return each episode as separate item for parallel processing\nreturn toProcess.map(episode => ({ json: episode }));"
+      },
+      "id": "filter-episodes",
+      "name": "Filter Episodes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "notes": "Filters episodes by date range and generation status, returns candidates for processing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "episode-exists",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "no_episodes",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-episodes-exist",
+      "name": "Episodes Exist?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ],
+      "notes": "Checks if there are episodes to process"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate episode content using OpenAI\nconst episode = $json;\nconst config = $('Initialize Workflow').first().json.config;\n\n// Episode structures for content generation\nconst EPISODE_STRUCTURES = {\n  main: [\n    {name: 'Opening & Welcome', target: 500, description: 'Warm opening with episode preview'},\n    {name: 'Topic Introduction', target: 1000, description: 'Personal story and topic setup'},\n    {name: 'Deep Dive Part 1', target: 1200, description: 'Core concepts and experiences'},\n    {name: 'Research & Evidence', target: 1500, description: 'Studies, citations, and scientific backing'},\n    {name: 'Deep Dive Part 2', target: 1200, description: 'Advanced concepts and nuances'},\n    {name: 'Listener Stories', target: 1500, description: 'Community experiences and validation'},\n    {name: 'Practical Tools Part 1', target: 1000, description: 'Techniques and exercises'},\n    {name: 'Practical Tools Part 2', target: 1000, description: 'More tools and real-world application'},\n    {name: 'Integration & Wrap-up', target: 600, description: 'Bringing it all together and closing'}\n  ],\n  friday: [\n    {name: 'Opening & Welcome', target: 400, description: 'Warm Friday healing opening'},\n    {name: 'Topic Exploration', target: 800, description: 'Core topic with personal stories'},\n    {name: 'Research & Evidence', target: 600, description: 'Supporting studies and citations'},\n    {name: 'Community Focus', target: 700, description: 'Listener stories and shared experiences'},\n    {name: 'Practical Tools', target: 400, description: 'Healing techniques and exercises'},\n    {name: 'Closing & Preview', target: 300, description: 'Gentle wrap-up and next episode preview'}\n  ]\n};\n\nconst sections = EPISODE_STRUCTURES[episode._type];\n\nconsole.log(`Processing episode: ${episode._topic} (${episode._type})`);\nconsole.log(`Row ${episode._rowIndex}: ${episode._inputString}`);\n\nreturn [{\n  json: {\n    ...episode,\n    sections,\n    contentGenerationStage: 'ready',\n    currentSection: 0,\n    completedSections: [],\n    combinedScript: '',\n    generatedContent: {\n      script: '',\n      title: '',\n      description: '',\n      htmlDescription: '',\n      tags: ''\n    }\n  }\n}];"
+      },
+      "id": "prepare-content-generation",
+      "name": "Prepare Content Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ],
+      "notes": "Prepares episode for content generation by setting up sections and structure"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create section prompt for OpenAI\nconst episode = $json;\nconst section = episode.sections[episode.currentSection];\nconst input = episode._inputString;\nconst completedSections = episode.completedSections;\nconst index = episode.currentSection;\nconst totalSections = episode.sections.length;\n\nfunction createSectionPrompt(section, input, completedSections, index, totalSections) {\n  const prompt = `You are Gregory, host of \"CPTSD: Let's Make Sense of This Shit.\" Generate the \"${section.name}\" section that flows seamlessly from previous sections.\n\nEPISODE INPUT: ${input}\n\nSECTION REQUIREMENTS:\n- Section: ${section.name}\n- Target: EXACTLY ${section.target} words (count as you write)\n- Purpose: ${section.description}\n- Voice: Gregory's compassionate, validating, gently humorous, deeply practical style\n- Format: Natural conversational paragraphs only - no headings, lists, or stage directions\n\n${index === 0 ? 'OPENING SECTION - Start with a warm welcome (avoid clichés). Include a detailed preview.' : 'CONTINUATION SECTION - Flow from prior content without re-introductions.'}\n${index === totalSections - 1 ? 'CLOSING SECTION - Wrap up naturally. End with the Supporters Club CTA exactly as specified.' : ''}\n\n${completedSections.length > 0 ? `Previous sections covered: ${completedSections.map(s => s.name).join(', ')}\nLast section ended with: ${completedSections[completedSections.length - 1].content.split(' ').slice(-50).join(' ')}` : 'This is the first section.'}\n\nCRITICAL FLOW RULES:\n- No repeated intros\n- Use natural transitions\n- EXACTLY ${section.target} words\n- Continue a single uninterrupted conversation.`;\n  \n  return prompt;\n}\n\nconst prompt = createSectionPrompt(section, input, completedSections, index, totalSections);\n\nreturn [{\n  json: {\n    ...episode,\n    sectionPrompt: prompt,\n    currentSectionData: section\n  }\n}];"
+      },
+      "id": "create-section-prompt",
+      "name": "Create Section Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ],
+      "notes": "Creates the OpenAI prompt for the current section"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "model": "={{ $('Initialize Workflow').first().json.config.OPENAI_TEXT_MODEL }}",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ $json.sectionPrompt }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": "={{ Math.round($json.currentSectionData.target * 1.6) }}",
+          "temperature": 0.7
+        }
+      },
+      "id": "generate-section",
+      "name": "Generate Section",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        200
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates section content using OpenAI"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process generated section and check if more sections needed\nconst episode = $json;\nconst generatedContent = $('Generate Section').first().json.message.content;\n\n// Word count function\nfunction wordCount(text) {\n  return text.trim().split(/\\s+/).filter(word => word.length > 0).length;\n}\n\nconst wc = wordCount(generatedContent);\nconst completedSection = {\n  name: episode.currentSectionData.name,\n  content: generatedContent,\n  wordCount: wc\n};\n\n// Update episode data\nconst updatedCompletedSections = [...episode.completedSections, completedSection];\nconst updatedCombinedScript = episode.combinedScript + \n  (episode.currentSection > 0 ? '\\n\\n' : '') + generatedContent;\n\nconst nextSectionIndex = episode.currentSection + 1;\nconst hasMoreSections = nextSectionIndex < episode.sections.length;\n\nconsole.log(`Section \"${episode.currentSectionData.name}\" completed: ${wc} words`);\n\nif (hasMoreSections) {\n  // More sections to generate\n  return [{\n    json: {\n      ...episode,\n      currentSection: nextSectionIndex,\n      completedSections: updatedCompletedSections,\n      combinedScript: updatedCombinedScript,\n      contentGenerationStage: 'continue'\n    }\n  }];\n} else {\n  // All sections complete, move to final content generation\n  return [{\n    json: {\n      ...episode,\n      completedSections: updatedCompletedSections,\n      combinedScript: updatedCombinedScript,\n      contentGenerationStage: 'script_complete'\n    }\n  }];\n}"
+      },
+      "id": "process-section",
+      "name": "Process Section",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ],
+      "notes": "Processes generated section and determines if more sections are needed"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "more-sections",
+              "leftValue": "={{ $json.contentGenerationStage }}",
+              "rightValue": "continue",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-more-sections",
+      "name": "More Sections?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        200
+      ],
+      "notes": "Checks if more sections need to be generated"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "model": "={{ $('Initialize Workflow').first().json.config.OPENAI_TEXT_MODEL }}",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Based on this complete CPTSD podcast script, create a 60-70 character SEO title that includes \"CPTSD\". Return ONLY the title. Script: {{ $json.combinedScript }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 64,
+          "temperature": 0.6
+        }
+      },
+      "id": "generate-title",
+      "name": "Generate Title",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        100
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates episode title using OpenAI"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "model": "={{ $('Initialize Workflow').first().json.config.OPENAI_TEXT_MODEL }}",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Create a universal podcast description with bold headers and \"•\" bullets per this template. 450-850 words. Script: {{ $('Process Section').first().json.combinedScript }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 900,
+          "temperature": 0.7
+        }
+      },
+      "id": "generate-description",
+      "name": "Generate Description",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        200
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates plain text description using OpenAI"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "model": "={{ $('Initialize Workflow').first().json.config.OPENAI_TEXT_MODEL }}",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Create a Spotify-friendly HTML description (p,strong,ul,li,a,br only). 450-850 words. Script: {{ $('Process Section').first().json.combinedScript }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 900,
+          "temperature": 0.7
+        }
+      },
+      "id": "generate-html-description",
+      "name": "Generate HTML Description",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates HTML description using OpenAI"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "model": "={{ $('Initialize Workflow').first().json.config.OPENAI_TEXT_MODEL }}",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Generate exactly 20 single-word, lowercase SEO tags as a comma-separated list. Script: {{ $('Process Section').first().json.combinedScript }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.4
+        }
+      },
+      "id": "generate-tags",
+      "name": "Generate Tags",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates tags using OpenAI"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all generated content and add Supporters Club CTA\nconst episode = $('Process Section').first().json;\nconst title = $('Generate Title').first().json.message.content.trim().replace(/^\"|\"$/g, '');\nconst description = $('Generate Description').first().json.message.content;\nconst htmlDescription = $('Generate HTML Description').first().json.message.content;\nconst rawTags = $('Generate Tags').first().json.message.content;\n\n// Sanitize tags\nfunction sanitizeTags(tags) {\n  return tags\n    .split(',')\n    .map(tag => tag.trim().toLowerCase().replace(/[^a-z0-9]/g, ''))\n    .filter(tag => tag.length > 0)\n    .slice(0, 20)\n    .join(',');\n}\n\nconst tags = sanitizeTags(rawTags);\n\n// Add Supporters Club CTA if not already present\nlet finalScript = episode.combinedScript;\nif (!finalScript.toLowerCase().includes('supporters club')) {\n  finalScript += \"\\n\\nIf this podcast helps you make sense of your shit, join our Supporters Club to go ad-free and help us keep these conversations going. You can find the link to join in the episode description.\";\n}\n\nconst generatedContent = {\n  script: finalScript,\n  title,\n  description,\n  htmlDescription,\n  tags\n};\n\nconsole.log(`Content generation complete for episode: ${episode._topic}`);\nconsole.log(`Title: ${title}`);\nconsole.log(`Script length: ${finalScript.length} characters`);\nconsole.log(`Tags: ${tags}`);\n\nreturn [{\n  json: {\n    ...episode,\n    generatedContent,\n    contentGenerationStage: 'complete'\n  }\n}];"
+      },
+      "id": "combine-content",
+      "name": "Combine Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        200
+      ],
+      "notes": "Combines all generated content and adds Supporters Club CTA"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "generate",
+        "model": "tts-1",
+        "input": "={{ $json.generatedContent.script }}",
+        "voice": "fable",
+        "options": {
+          "responseFormat": "mp3"
+        }
+      },
+      "id": "generate-audio",
+      "name": "Generate Audio",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        200
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Credentials"
+        }
+      },
+      "notes": "Generates MP3 audio using OpenAI TTS"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if we're in dry run mode\nconst config = $('Initialize Workflow').first().json.config;\nconst episode = $json;\n\nif (config.DRY_RUN) {\n  console.log(`DRY RUN: Would upload episode: ${episode.generatedContent.title}`);\n  console.log(`Script: ${episode.generatedContent.script.substring(0, 200)}...`);\n  console.log(`Audio size: ${$('Generate Audio').first().binary.data.length} bytes`);\n  \n  return [{\n    json: {\n      ...episode,\n      uploadResult: {\n        success: true,\n        dryRun: true,\n        episodeId: 'dry-run-12345',\n        episodeUrl: 'https://spreaker.com/dry-run-episode'\n      }\n    }\n  }];\n}\n\n// Prepare for actual upload\nreturn [{\n  json: {\n    ...episode,\n    readyForUpload: true\n  }\n}];"
+      },
+      "id": "check-dry-run",
+      "name": "Check Dry Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        200
+      ],
+      "notes": "Checks if this is a dry run or actual upload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "not-dry-run",
+              "leftValue": "={{ $json.uploadResult.dryRun }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-upload-needed",
+      "name": "Upload Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        200
+      ],
+      "notes": "Determines if actual upload is needed (not dry run)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.spreaker.com/v2/oauth2/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $vars.SPREAKER_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $vars.SPREAKER_CLIENT_SECRET }}"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $vars.SPREAKER_REFRESH_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "refresh-spreaker-token",
+      "name": "Refresh Spreaker Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3540,
+        100
+      ],
+      "notes": "Refreshes Spreaker access token using refresh token"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.spreaker.com/v2/shows/{{ $vars.SPREAKER_SHOW_ID }}/episodes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $('Refresh Spreaker Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $('Check Dry Run').first().json.generatedContent.title }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $('Check Dry Run').first().json.generatedContent.htmlDescription }}"
+            },
+            {
+              "name": "tags",
+              "value": "={{ $('Check Dry Run').first().json.generatedContent.tags }}"
+            },
+            {
+              "name": "published_at",
+              "value": "={{ $('Check Dry Run').first().json._parsedDate.toISOString().split('T')[0] }}T{{ $vars.SPREAKER_PUBLISH_TIME_UTC || '08:00:00' }}.000Z"
+            },
+            {
+              "name": "download_enabled",
+              "value": "true"
+            },
+            {
+              "name": "media_url",
+              "value": ""
+            }
+          ]
+        },
+        "options": {
+          "bodyParametersBinary": [
+            {
+              "name": "media",
+              "inputDataFieldName": "data",
+              "fileName": "episode.mp3"
+            }
+          ]
+        }
+      },
+      "id": "upload-episode",
+      "name": "Upload to Spreaker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3760,
+        100
+      ],
+      "notes": "Uploads episode to Spreaker with all metadata and audio file"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process upload result and prepare for Google Sheets update\nconst episode = $('Check Dry Run').first().json;\nconst uploadResponse = $('Upload to Spreaker').first().json;\n\nlet uploadResult;\nif (episode.uploadResult?.dryRun) {\n  // Dry run result\n  uploadResult = episode.uploadResult;\n} else {\n  // Actual upload result\n  uploadResult = {\n    success: true,\n    episodeId: uploadResponse.response?.episode?.episode_id || uploadResponse.episode_id,\n    episodeUrl: uploadResponse.response?.episode?.playback_url || uploadResponse.playback_url || `https://spreaker.com/episode/${uploadResponse.response?.episode?.episode_id || uploadResponse.episode_id}`\n  };\n}\n\nconsole.log(`Upload ${uploadResult.success ? 'successful' : 'failed'} for episode: ${episode.generatedContent.title}`);\nif (uploadResult.episodeId) {\n  console.log(`Episode ID: ${uploadResult.episodeId}`);\n  console.log(`Episode URL: ${uploadResult.episodeUrl}`);\n}\n\nreturn [{\n  json: {\n    ...episode,\n    uploadResult,\n    readyForSheetsUpdate: true\n  }\n}];"
+      },
+      "id": "process-upload-result",
+      "name": "Process Upload Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3980,
+        200
+      ],
+      "notes": "Processes upload result and prepares for Google Sheets update"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "serviceAccountJSON": "={{ $vars.GOOGLE_SERVICE_ACCOUNT_JSON }}",
+        "documentId": "={{ $vars.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+        "sheetName": "={{ $vars.GOOGLE_SHEETS_TAB_NAME }}",
+        "operation": "update",
+        "range": "A{{ $json._rowIndex }}:Z{{ $json._rowIndex }}",
+        "options": {
+          "valueInputMode": "RAW"
+        }
+      },
+      "id": "update-google-sheets",
+      "name": "Update Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        4200,
+        200
+      ],
+      "notes": "Updates Google Sheets with generation status and episode URLs"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final workflow completion\nconst processedEpisodes = $input.all().map(item => ({\n  title: item.json.generatedContent?.title || 'Unknown',\n  topic: item.json._topic,\n  type: item.json._type,\n  row: item.json._rowIndex,\n  status: item.json.uploadResult?.success ? 'Success' : 'Failed',\n  episodeId: item.json.uploadResult?.episodeId,\n  episodeUrl: item.json.uploadResult?.episodeUrl,\n  dryRun: item.json.uploadResult?.dryRun || false\n}));\n\nconst summary = {\n  totalProcessed: processedEpisodes.length,\n  successful: processedEpisodes.filter(ep => ep.status === 'Success').length,\n  failed: processedEpisodes.filter(ep => ep.status === 'Failed').length,\n  dryRun: processedEpisodes.some(ep => ep.dryRun),\n  episodes: processedEpisodes,\n  completedAt: new Date().toISOString()\n};\n\nconsole.log('🎉 Roo Podcast Automation Workflow Complete!');\nconsole.log(`Processed: ${summary.totalProcessed} episodes`);\nconsole.log(`Successful: ${summary.successful}`);\nconsole.log(`Failed: ${summary.failed}`);\nif (summary.dryRun) {\n  console.log('⚠️ This was a DRY RUN - no actual uploads were made');\n}\n\nprocessedEpisodes.forEach(ep => {\n  console.log(`Row ${ep.row}: ${ep.title} (${ep.type}) - ${ep.status}`);\n  if (ep.episodeUrl) {\n    console.log(`  URL: ${ep.episodeUrl}`);\n  }\n});\n\nreturn [{ json: summary }];"
+      },
+      "id": "workflow-complete",
+      "name": "Workflow Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4420,
+        200
+      ],
+      "notes": "Final workflow completion summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// No episodes to process - log and exit gracefully\nconst result = $json;\n\nconsole.log('ℹ️ No episodes to process');\nconsole.log('Skipped episodes:', result.skipped);\nconsole.log('The workflow will exit gracefully');\n\nreturn [{\n  json: {\n    status: 'completed',\n    message: 'No episodes to process',\n    skipped: result.skipped,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "no-episodes-handler",
+      "name": "No Episodes Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        400
+      ],
+      "notes": "Handles case when no episodes need processing"
+    }
+  ],
+  "connections": {
+    "Weekly Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read Episode Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Episode Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Episodes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Episodes": {
+      "main": [
+        [
+          {
+            "node": "Episodes Exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Episodes Exist?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Content Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Episodes Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Content Generation": {
+      "main": [
+        [
+          {
+            "node": "Create Section Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Section Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Section",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Section": {
+      "main": [
+        [
+          {
+            "node": "Process Section",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Section": {
+      "main": [
+        [
+          {
+            "node": "More Sections?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Sections?": {
+      "main": [
+        [
+          {
+            "node": "Create Section Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Title",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Description",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate HTML Description",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Title": {
+      "main": [
+        [
+          {
+            "node": "Combine Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Description": {
+      "main": [
+        [
+          {
+            "node": "Combine Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate HTML Description": {
+      "main": [
+        [
+          {
+            "node": "Combine Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tags": {
+      "main": [
+        [
+          {
+            "node": "Combine Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Content": {
+      "main": [
+        [
+          {
+            "node": "Generate Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Audio": {
+      "main": [
+        [
+          {
+            "node": "Check Dry Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dry Run": {
+      "main": [
+        [
+          {
+            "node": "Upload Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Needed?": {
+      "main": [
+        [
+          {
+            "node": "Refresh Spreaker Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Upload Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Spreaker Token": {
+      "main": [
+        [
+          {
+            "node": "Upload to Spreaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Spreaker": {
+      "main": [
+        [
+          {
+            "node": "Process Upload Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Upload Result": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Workflow Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": {
+      "errorWorkflow": "",
+      "saveDataOnError": "all",
+      "saveManualExecutions": false
+    }
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "podcast-automation",
+      "name": "Podcast Automation"
+    },
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z", 
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "roo-workflow",
+      "name": "Roo Workflow"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}
