@@ -1,5 +1,35 @@
 # Railway Podcast Automation
 
+## 🚀 Quick Preview
+
+**Try the OAuth Helper Interface:**
+
+[![Open Preview](https://img.shields.io/badge/🌐_Open-localhost:3000-blue?style=for-the-badge)](http://localhost:3000)
+[![Preview Guide](https://img.shields.io/badge/📖_How_to-Launch_Preview-green?style=for-the-badge)](#launching-the-preview)
+
+### Launching the Preview
+
+Choose your platform to start the OAuth Helper on `localhost:3000`:
+
+**macOS / Linux:**
+```bash
+./preview-mac.sh    # For macOS
+./preview-linux.sh  # For Linux
+```
+
+**Windows:**
+```cmd
+preview-windows.bat      # Command Prompt
+preview-windows.ps1      # PowerShell
+```
+
+The scripts will:
+- ✅ Check and install dependencies automatically
+- ✅ Start the OAuth Helper server on port 3000
+- ✅ Open your default browser to `http://localhost:3000`
+
+---
+
 This Cron job runs once per week on Railway and will:
 - Read your Google Sheet for any episode with a publish date from the past year to the next ~2 months that isn't generated yet
 - Generate the script + title + plain & HTML descriptions + tags
